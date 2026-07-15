@@ -60,7 +60,7 @@ type ScorecardEntry = {
     client_patterns?: { name: string; patterns: string[] }[];
     universal_rules?: ScorecardRule[];
     client_rule_sets?: Record<string, { clients?: string[]; rules?: ScorecardRule[] }>;
-    critical_checks?: ScorecardRule[];
+    critical_checks?: Array<string | ScorecardRule>;
   };
 };
 type ScorecardLibrary = { active_scorecard_id?: string; scorecards: ScorecardEntry[]; required_clients_available?: boolean };
@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.5";
+const APP_VERSION = "0.5.6";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -453,26 +453,36 @@ function makeRubricRow(clientName: string, aliases: string, rule?: ScorecardRule
   };
 }
 
-function rubricRowsFromEntry(entry?: ScorecardEntry) {
+export function rubricRowsFromEntry(entry?: ScorecardEntry) {
   if (!entry?.bundle) return [makeRubricRow("", "", undefined, false)];
   const defaultClient = entry.bundle.client_patterns?.[0]?.name || entry.name || "";
   const defaultAliases = (entry.bundle.client_patterns?.[0]?.patterns ?? []).map(cleanPatternForEditor).filter(Boolean).join("; ");
   const rows: RubricRow[] = [];
+  const criticalRefs = entry.bundle.critical_checks ?? [];
+  const criticalNames = new Set(criticalRefs.map((check) => ruleKey(typeof check === "string" ? check : check.name)));
+  const resolvedCriticalNames = new Set<string>();
+
+  const addRule = (client: string, aliases: string, rule: ScorecardRule) => {
+    const critical = criticalNames.has(ruleKey(rule.name));
+    if (critical) resolvedCriticalNames.add(ruleKey(rule.name));
+    rows.push(makeRubricRow(client, aliases, rule, critical));
+  };
 
   for (const rule of entry.bundle.universal_rules ?? []) {
     if (rule.name === "Client identified") continue;
-    rows.push(makeRubricRow(defaultClient, defaultAliases, rule, false));
+    addRule(defaultClient, defaultAliases, rule);
   }
   for (const set of Object.values(entry.bundle.client_rule_sets ?? {})) {
     const clientName = set.clients?.[0] || defaultClient;
     const aliasGroup = entry.bundle.client_patterns?.find((group) => group.name === clientName);
     const aliases = (aliasGroup?.patterns ?? []).map(cleanPatternForEditor).filter(Boolean).join("; ") || defaultAliases;
     for (const rule of set.rules ?? []) {
-      rows.push(makeRubricRow(clientName, aliases, rule, false));
+      addRule(clientName, aliases, rule);
     }
   }
-  for (const rule of entry.bundle.critical_checks ?? []) {
-    rows.push(makeRubricRow(defaultClient, defaultAliases, rule, true));
+  for (const check of criticalRefs) {
+    const rule = typeof check === "string" ? { name: check } : check;
+    if (!resolvedCriticalNames.has(ruleKey(rule.name))) rows.push(makeRubricRow(defaultClient, defaultAliases, rule, true));
   }
   return rows.length ? rows : [makeRubricRow(defaultClient, defaultAliases, undefined, false)];
 }
@@ -496,7 +506,7 @@ function bundleFromRubricRows(original: Record<string, unknown>, name: string, r
   const usable = rows.filter((row) => row.client_name.trim() || row.qualifier_name.trim());
   const clientMap = new Map<string, { aliases: Set<string>; rules: ScorecardRule[] }>();
   const universalRules: ScorecardRule[] = [];
-  const criticalChecks: ScorecardRule[] = [];
+  const criticalChecks: string[] = [];
 
   for (const row of usable) {
     const client = row.client_name.trim() || name || "Default client";
@@ -505,11 +515,8 @@ function bundleFromRubricRows(original: Record<string, unknown>, name: string, r
     const clientInfo = clientMap.get(client)!;
     aliases.forEach((alias) => clientInfo.aliases.add(alias));
     const rule = rowToRule(row, row.critical ? "Critical" : "Qualifier");
-    if (row.critical) {
-      criticalChecks.push(rule);
-    } else {
-      clientInfo.rules.push(rule);
-    }
+    clientInfo.rules.push(rule);
+    if (row.critical) criticalChecks.push(rule.name);
   }
 
   const client_patterns = [...clientMap.entries()].map(([client, info]) => ({
@@ -724,13 +731,21 @@ function pickScorecard(transcript: string, library: ScorecardLibrary) {
   return { entry: best, client };
 }
 
-function rulesFor(entry: ScorecardEntry, client: string) {
+export function rulesFor(entry: ScorecardEntry, client: string) {
   const universal = entry.bundle?.universal_rules ?? [];
-  const critical = (entry.bundle?.critical_checks ?? []).map((rule) => ({ ...rule, name: `Critical: ${rule.name}` }));
   const clientSets = Object.values(entry.bundle?.client_rule_sets ?? {});
   const matchingSet =
     clientSets.find((set) => (set.clients ?? []).some((name) => name.toLowerCase() === client.toLowerCase())) ?? clientSets[0];
-  return [...universal, ...(matchingSet?.rules ?? []), ...critical].filter((rule) => rule.name !== "Client identified");
+  const criticalRefs = entry.bundle?.critical_checks ?? [];
+  const criticalNames = new Set(criticalRefs.map((check) => ruleKey(typeof check === "string" ? check : check.name)));
+  const baseRules = [...universal, ...(matchingSet?.rules ?? [])].filter((rule) => rule.name !== "Client identified");
+  const seen = new Set(baseRules.map((rule) => ruleKey(rule.name)));
+  const resolved = baseRules.map((rule) => criticalNames.has(ruleKey(rule.name)) ? { ...rule, type: "Critical" } : rule);
+  for (const check of criticalRefs) {
+    if (typeof check === "string" || seen.has(ruleKey(check.name))) continue;
+    resolved.push({ ...check, type: "Critical" });
+  }
+  return resolved;
 }
 
 function gradeRule(rule: ScorecardRule, transcript: string, duration = 0): AnalysisRow {

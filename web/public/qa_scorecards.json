@@ -124,8 +124,8 @@
                 "negative_patterns": [
                   "\\bAppointment\\s+length\\s+not\\s+specified\\b"
                 ],
-                "pass_description": "Appointment is confirmed as being 60-90 minutes",
-                "fail_description": "Appointment length not specified"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "All decision makers present",
@@ -137,8 +137,8 @@
                 "negative_patterns": [
                   "\\bQuestion\\s+about\\s+decision\\s+makers\\s+not\\s+asked\\s+or\\s+other\\s+decision\\s+makers\\s+exist\\s+but\\s+will\\s+not\\s+be\\s+present\\b"
                 ],
-                "pass_description": "All decision makers like spouses, long term partners, or domestic partners are confirmed to be present if applicable",
-                "fail_description": "Question about decision makers not asked or other decision makers exist but will not be present"
+                "pass_description": "PASS only when all relevant decision makers, including a spouse or partner, are explicitly confirmed to attend, or the customer explicitly confirms they are the sole decision maker. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when another decision maker exists and will not attend. If the agent never establishes whether other decision makers exist, mark Needs review rather than Pass."
               },
               {
                 "name": "Address Confirmed",
