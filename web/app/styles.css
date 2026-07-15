@@ -90,6 +90,7 @@ nav button.active { background: var(--brand); color: white; border-color: var(--
 }
 .side-card span { color: #a8b3c2; display: block; font-size: .86rem; margin-bottom: 5px; }
 .side-card strong { display: block; }
+.side-card button { margin-top: 10px; width: 100%; }
 
 main { padding: 22px; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }
@@ -184,7 +185,21 @@ small { color: var(--muted); overflow-wrap: break-word; }
 .scorecard-list article.selected { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15, 118, 110, .14); }
 .scorecard-list article { display: grid; gap: 10px; }
 .scorecard-list p, .mirror-list p, .review-call-picker p { color: var(--muted); margin: 4px 0; line-height: 1.4; }
-.scorecard-editor textarea { min-height: 520px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9rem; }
+.scorecard-editor {
+  display: grid;
+  gap: 12px;
+}
+.scorecard-editor textarea { min-height: 360px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9rem; }
+.scorecard-editor .short-editor {
+  min-height: 120px;
+  font-family: inherit;
+  font-size: .95rem;
+}
+.scorecard-editor summary {
+  cursor: pointer;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
 .mirror-list { display: grid; gap: 10px; margin-top: 12px; }
 .mirror-list a { color: var(--brand-dark); font-weight: 800; }
 .pill {
@@ -208,14 +223,28 @@ small { color: var(--muted); overflow-wrap: break-word; }
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 8px;
 }
+.review-call-list article {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+.review-call-list article.active { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15, 118, 110, .16); }
 .review-call-list button {
+  border: 0;
+  background: transparent;
+  padding: 0;
   display: grid;
   gap: 3px;
   text-align: left;
   align-content: start;
+  min-height: 0;
 }
-.review-call-list button.active { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15, 118, 110, .16); }
+.review-call-list button:hover { background: transparent; }
 .review-call-list span { color: var(--muted); font-size: .86rem; }
+.review-call-list a, .panel-title a { color: var(--brand-dark); font-weight: 800; }
 .qa-table-wrap {
   overflow-x: auto;
   max-width: 100%;
@@ -291,6 +320,7 @@ iframe {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: white;
+  margin-top: 12px;
 }
 .signout-form {
   position: fixed;

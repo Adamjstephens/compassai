@@ -66,9 +66,13 @@ type Job = {
 const OPENAI_KEY_STORAGE = "compassai.openaiApiKey";
 const JOB_STORAGE = "compassai.vercelOnly.jobs";
 const SCORECARD_STORAGE = "compassai.scorecards";
-const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
-const QA_MODEL = "gpt-4o-mini";
-const APP_VERSION = "0.2.0";
+const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const DEFAULT_QA_MODEL = "gpt-4o-mini";
+const TRANSCRIPTION_MODEL_STORAGE = "compassai.transcriptionModel";
+const QA_MODEL_STORAGE = "compassai.qaModel";
+const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"];
+const QA_MODELS = ["gpt-4o-mini", "gpt-4.1-mini"];
+const APP_VERSION = "0.3.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -93,10 +97,79 @@ function escapeHtml(value: unknown) {
     .replaceAll("'", "&#39;");
 }
 
-function titleFor(result: JobResult) {
+function cleanApiKey(value = "") {
+  const compact = value.replace(/\s+/g, "").trim();
+  if (/^sk-proj(?!-)/.test(compact)) return compact.replace(/^sk-proj/, "sk-proj-");
+  return compact;
+}
+
+function redactSensitive(value: unknown) {
+  return String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-...redacted...");
+}
+
+function normalizePhone(value = "") {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+function formatPhone(value = "") {
+  const phone = normalizePhone(value);
+  return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : value;
+}
+
+function extractAgentName(transcript = "") {
+  const patterns = [
+    /\bthis is\s+([A-Z][a-z]{1,24})\b/,
+    /\bmy name is\s+([A-Z][a-z]{1,24})\b/,
+    /\b([A-Z][a-z]{1,24})\s+speaking\b/,
+    /\b([A-Z][a-z]{1,24})\s+here\s+from\b/,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(transcript);
+    if (match?.[1]) return match[1];
+  }
+  return "";
+}
+
+function resultPhones(result: JobResult) {
+  const phones = [...result.transcript_text.matchAll(/\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g)].map((match) => normalizePhone(match[0]));
+  return new Set(phones.filter(Boolean));
+}
+
+function matchMirrorLead(result: JobResult, mirrorLeads: MirrorLead[] = []) {
+  if (!mirrorLeads.length) return undefined;
+  const phones = resultPhones(result);
+  const byPhone = mirrorLeads.find((lead) => lead.phone && phones.has(normalizePhone(lead.phone)));
+  if (byPhone) return byPhone;
+  const transcript = normalizeKey(result.transcript_text);
+  return mirrorLeads.find((lead) => {
+    const customer = normalizeKey(lead.customer || lead.label);
+    return customer.length > 5 && transcript.includes(customer);
+  });
+}
+
+function callMeta(result: JobResult, mirrorLeads: MirrorLead[] = []) {
+  const lead = matchMirrorLead(result, mirrorLeads);
+  return {
+    agent: extractAgentName(result.transcript_text),
+    customer: lead?.customer || "",
+    phone: lead?.phone || "",
+    clover: lead?.clover_url || "",
+    disposition: lead?.disposition || "",
+    lead,
+  };
+}
+
+function titleFor(result: JobResult, mirrorLeads: MirrorLead[] = []) {
   const client = result.analysis?.client || "Unknown";
   const scorecard = result.analysis?.scorecard_name || "Not selected";
-  return `${result.file_name} | Client: ${client} | Scorecard: ${scorecard}`;
+  const meta = callMeta(result, mirrorLeads);
+  const extras = [
+    meta.customer ? `Customer: ${meta.customer}` : "",
+    meta.phone ? `Phone: ${formatPhone(meta.phone)}` : "",
+    meta.agent ? `Agent: ${meta.agent}` : "",
+  ].filter(Boolean);
+  return `${result.file_name} | Client: ${client} | Scorecard: ${scorecard}${extras.length ? ` | ${extras.join(" | ")}` : ""}`;
 }
 
 function freeAlerts(text: string) {
@@ -141,6 +214,53 @@ function scorecardSummary(entry: ScorecardEntry) {
   const critical = bundle.critical_checks?.length ?? 0;
   const aliases = (bundle.client_patterns ?? []).reduce((sum, group) => sum + (group.patterns?.length ?? 0), 0);
   return entry.summary || `${clientSets} client set(s), ${universal} universal rule(s), ${critical} critical check(s), ${aliases} aliases`;
+}
+
+function patternsToText(entry?: ScorecardEntry) {
+  return (entry?.bundle?.client_patterns ?? [])
+    .map((group) => `${group.name}: ${(group.patterns ?? []).join(", ")}`)
+    .join("\n");
+}
+
+function rulesToText(rules: ScorecardRule[] = []) {
+  return rules
+    .map((rule) => {
+      const positives = (rule.positive_patterns ?? []).join(", ");
+      const negatives = (rule.negative_patterns ?? []).join(", ");
+      return `${rule.name} | ${positives} | ${negatives}`;
+    })
+    .join("\n");
+}
+
+function parsePatternText(value: string) {
+  return value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, rawPatterns = ""] = line.split(/:(.*)/s);
+      return {
+        name: (name || "Client").trim(),
+        patterns: rawPatterns.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
+      };
+    })
+    .filter((group) => group.name && group.patterns.length);
+}
+
+function parseRuleText(value: string, fallbackType: string) {
+  return value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name = "", positives = "", negatives = ""] = line.split("|").map((part) => part.trim());
+      return {
+        name: name || "New qualifier",
+        type: fallbackType,
+        positive_patterns: positives.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
+        negative_patterns: negatives.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
+      };
+    });
 }
 
 function normalizeScorecardLibrary(library: ScorecardLibrary): ScorecardLibrary {
@@ -377,33 +497,33 @@ function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? []
 
 function makeErrorReport(stage: string, error: unknown, extra: Record<string, unknown> = {}) {
   const lines = [
-    "CompassAi Vercel-Only Error Report",
+    "CompassAi Cloud LLM Error Report",
     "",
     `What failed: ${stage}`,
-    `Exact error: ${error instanceof Error ? error.message : String(error)}`,
+    `Exact error: ${redactSensitive(error instanceof Error ? error.message : String(error))}`,
     `Timestamp: ${new Date().toISOString()}`,
     `Platform: ${navigator.platform}`,
     `Browser: ${navigator.userAgent}`,
-    "Hosting: Vercel-only browser workflow",
+    "Hosting: Web based, CompassAi",
   ];
   for (const [key, value] of Object.entries(extra)) {
-    if (value !== undefined && value !== "") lines.push(`${key}: ${value}`);
+    if (value !== undefined && value !== "") lines.push(`${key}: ${redactSensitive(value)}`);
   }
   lines.push("Likely fix: verify the OpenAI API key, billing, model access, and use a smaller or compressed audio file if the Vercel upload relay reports a payload limit.");
   lines.push("Transcript and audio content are intentionally omitted.");
   return lines.join("\n");
 }
 
-async function transcribeDirect(file: File, apiKey: string) {
+async function runTranscriptionFiles(file: File, apiKey: string, model: string) {
   if (file.size > MAX_BROWSER_AUDIO_BYTES) {
-    throw new Error(`File is ${(file.size / 1024 / 1024).toFixed(1)} MB. CompassAi's Vercel-only browser workflow works best below about ${(MAX_BROWSER_AUDIO_BYTES / 1024 / 1024).toFixed(0)} MB.`);
+    throw new Error(`File is ${(file.size / 1024 / 1024).toFixed(1)} MB. CompassAi's web workflow works best below about ${(MAX_BROWSER_AUDIO_BYTES / 1024 / 1024).toFixed(0)} MB.`);
   }
   const prepared = await splitWavForVercelRelay(file);
   const transcriptParts: string[] = [];
   let duration = prepared.duration;
   for (const [index, uploadFile] of prepared.files.entries()) {
     const form = new FormData();
-    form.append("model", TRANSCRIPTION_MODEL);
+    form.append("model", model);
     form.append("file", uploadFile);
     form.append("response_format", "json");
     const response = await fetch("/api/openai/transcriptions", {
@@ -426,15 +546,30 @@ async function transcribeDirect(file: File, apiKey: string) {
     duration,
     chunk_count: prepared.files.length,
     chunked: prepared.chunked,
+    model_used: model,
+    model_fallback: undefined as string | undefined,
   };
 }
 
-async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: string) {
+async function transcribeDirect(file: File, apiKey: string, requestedModel: string) {
+  try {
+    return await runTranscriptionFiles(file, apiKey, requestedModel || DEFAULT_TRANSCRIPTION_MODEL);
+  } catch (caught) {
+    if ((requestedModel || DEFAULT_TRANSCRIPTION_MODEL) === DEFAULT_TRANSCRIPTION_MODEL) throw caught;
+    const fallback = await runTranscriptionFiles(file, apiKey, DEFAULT_TRANSCRIPTION_MODEL);
+    return {
+      ...fallback,
+      model_fallback: `Requested transcription model '${requestedModel}' was not available, so CompassAi used '${DEFAULT_TRANSCRIPTION_MODEL}'.`,
+    };
+  }
+}
+
+async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: string, model: string) {
   const response = await fetch("/api/openai/chat", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: QA_MODEL,
+      model,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -474,18 +609,26 @@ function parseMirrorText(value: string): MirrorLead[] {
     const doc = parser.parseFromString(value, "text/html");
     doc.querySelectorAll("tr, .lead, .appointment, .customer, article, section").forEach((node, index) => {
       const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      const cells = Array.from(node.querySelectorAll("td, th, .name, .customer-name, .lead-name"))
+        .map((cell) => (cell.textContent || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
       const href = Array.from(node.querySelectorAll("a"))
         .map((link) => link.getAttribute("href") || "")
         .find((url) => /clover|lead|customer|contact/i.test(url));
       if (!href && text.length < 20) return;
       const phone = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.exec(text)?.[0] ?? "";
       const disposition = /(booked|appointment|rejected|not interested|no answer|cancelled|rescheduled)/i.exec(text)?.[0] ?? "";
+      const named = /(customer|name|homeowner)\s*:?\s*([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})/i.exec(text)?.[2] ?? "";
+      const customer = named || cells.find((cell) =>
+        /^[A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+){1,3}$/.test(cell) && !/booked|appointment|phone|email|address|clover/i.test(cell),
+      ) || "";
       if (href || phone || disposition) {
         rows.push({
           id: `${index}-${href || phone || text.slice(0, 20)}`,
           clover_url: href || "",
           label: text.slice(0, 120) || `MirrorCXT lead ${index + 1}`,
           disposition,
+          customer,
           phone,
         });
       }
@@ -500,27 +643,50 @@ function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
   const rows = results
     .map((result) => {
       const m = result.metrics;
-      return `<tr><td>${escapeHtml(titleFor(result))}</td><td>${escapeHtml(result.analysis.client)}</td><td>${escapeHtml(result.analysis.scorecard_name)}</td><td>${m?.qa_score ?? 0}%</td><td>${escapeHtml(m?.outcome)}</td><td>${escapeHtml(fmtSeconds(result.duration_seconds))}</td></tr>`;
+      const meta = callMeta(result, mirrorLeads);
+      return `<tr>
+        <td class="long">${escapeHtml(result.file_name)}</td>
+        <td>${escapeHtml(result.analysis.client)}</td>
+        <td>${escapeHtml(result.analysis.scorecard_name)}</td>
+        <td>${escapeHtml(meta.agent || "Not detected")}</td>
+        <td>${escapeHtml(meta.customer || "Not matched")}</td>
+        <td>${escapeHtml(meta.phone ? formatPhone(meta.phone) : "Not matched")}</td>
+        <td>${meta.clover ? `<a href="${escapeHtml(meta.clover)}">Open Clover</a>` : "Not matched"}</td>
+        <td>${m?.qa_score ?? 0}%</td>
+        <td>${escapeHtml(m?.outcome)}</td>
+        <td>${escapeHtml(fmtSeconds(result.duration_seconds))}</td>
+      </tr>`;
     })
     .join("");
   const transcriptSections = results
     .map(
-      (result, index) => `<section class="call"><h2>${escapeHtml(titleFor(result))}</h2>${freeAlerts(result.transcript_text)
+      (result, index) => {
+        const meta = callMeta(result, mirrorLeads);
+        return `<section class="call"><h2>${escapeHtml(titleFor(result, mirrorLeads))}</h2>
+        <div class="call-meta">
+          <span>Agent: <strong>${escapeHtml(meta.agent || "Not detected")}</strong></span>
+          <span>Customer: <strong>${escapeHtml(meta.customer || "Not matched")}</strong></span>
+          <span>Phone: <strong>${escapeHtml(meta.phone ? formatPhone(meta.phone) : "Not matched")}</strong></span>
+          ${meta.clover ? `<span>Clover: <a href="${escapeHtml(meta.clover)}">Open matched lead</a></span>` : ""}
+        </div>
+        ${freeAlerts(result.transcript_text)
         .map((alert) => `<div class="free-alert">${escapeHtml(alert)}</div>`)
-        .join("")}<input class="search" data-target="t${index}" placeholder="Search transcript"><div class="transcript" id="t${index}">${escapeHtml(result.transcript_text)}</div></section>`,
+        .join("")}<div class="search-row"><input class="search" data-target="t${index}" placeholder="Search this transcript"><button type="button" data-prev="t${index}">Previous</button><button type="button" data-next="t${index}">Next</button><span data-count="t${index}">0 matches</span></div><pre class="transcript" id="t${index}">${escapeHtml(result.transcript_text)}</pre></section>`;
+      },
     )
     .join("");
   const evidence = results
-    .flatMap((result) => result.qa_overrides ?? [])
-    .map((row) => `<tr><td>${escapeHtml(row.Qualifier)}</td><td>${escapeHtml(row["Final status"])}</td><td>${escapeHtml(row.Time)}</td><td class="long">${escapeHtml(row.Evidence)}</td><td class="long">${escapeHtml(row["Reviewer note"])}</td></tr>`)
+    .flatMap((result) => (result.qa_overrides ?? []).map((row) => ({ result, row })))
+    .map(({ result, row }) => `<tr><td class="long">${escapeHtml(result.file_name)}</td><td>${escapeHtml(row.Qualifier)}</td><td>${escapeHtml(row["Final status"])}</td><td>${escapeHtml(row.Time || "No timestamp")}</td><td class="long">${escapeHtml(row.Evidence)}</td><td class="long">${escapeHtml(row["Reviewer note"])}</td></tr>`)
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>CompassAi Report</title><style>
-body{font-family:Arial,sans-serif;margin:24px;color:#17202a;line-height:1.45}h1,h2{margin:.4rem 0}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:8px}table{border-collapse:collapse;min-width:1100px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:9px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}.long{white-space:normal;min-width:260px;max-width:520px;overflow-wrap:break-word}.transcript{white-space:pre-wrap;background:#f8fafc;border:1px solid #d8dee6;border-radius:8px;padding:14px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search{max-width:360px;margin:10px 0}@media print{body{margin:12px}.table-wrap{overflow:visible}table{font-size:11px}}</style></head><body>
-<h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Total call time: ${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}.</p>
-<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>QA Score</th><th>Outcome</th><th>Call Time</th></tr></thead><tbody>${rows}</tbody></table></div>
-<h2>QA Evidence</h2><div class="table-wrap"><table><thead><tr><th>Qualifier</th><th>Status</th><th>Time</th><th>Evidence</th><th>Reviewer Note</th></tr></thead><tbody>${evidence}</tbody></table></div>
-<h2>MirrorCXT Links</h2><ul>${mirrorLeads.map((lead) => `<li>${lead.clover_url ? `<a href="${escapeHtml(lead.clover_url)}">${escapeHtml(lead.clover_url)}</a>` : ""} ${escapeHtml(lead.label)}</li>`).join("")}</ul>
-${transcriptSections}<script>document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var t=document.getElementById(input.dataset.target);var raw=t.textContent;var escaped=input.value.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&');t.innerHTML=escaped?raw.replace(new RegExp(escaped,'gi'),function(m){return '<mark>'+m+'</mark>'}):raw})});</script></body></html>`;
+	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:14px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:10px;padding:14px}.card span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:10px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.call{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:16px;margin:16px 0}.call h2{margin-top:0}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:10px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call{break-inside:avoid}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
+	<div class="hero"><h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Polished web report with MirrorCXT matches, QA evidence, timestamps, and searchable transcripts.</p></div>
+	<div class="summary"><div class="card"><span>Calls</span><strong>${results.length}</strong></div><div class="card"><span>Total call time</span><strong>${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}</strong></div><div class="card"><span>MirrorCXT leads loaded</span><strong>${mirrorLeads.length}</strong></div><div class="card"><span>Average QA score</span><strong>${results.length ? Math.round(results.reduce((sum, result) => sum + (result.metrics?.qa_score ?? 0), 0) / results.length) : 0}%</strong></div></div>
+	<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Call Time</th></tr></thead><tbody>${rows}</tbody></table></div>
+	<h2>QA Evidence</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Qualifier</th><th>Status</th><th>Time</th><th>Evidence</th><th>Reviewer Note</th></tr></thead><tbody>${evidence}</tbody></table></div>
+	<h2>MirrorCXT Links</h2><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Disposition</th><th>Clover</th><th>Raw label</th></tr></thead><tbody>${mirrorLeads.map((lead) => `<tr><td>${escapeHtml(lead.customer || "")}</td><td>${escapeHtml(lead.phone ? formatPhone(lead.phone) : "")}</td><td>${escapeHtml(lead.disposition || "")}</td><td>${lead.clover_url ? `<a href="${escapeHtml(lead.clover_url)}">Open Clover</a>` : ""}</td><td class="long">${escapeHtml(lead.label)}</td></tr>`).join("")}</tbody></table></div>
+	${transcriptSections}</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id);var s=state[id];if(!t||!s)return;var count=document.querySelector('[data-count="'+id+'"]');if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&'),'gi');var i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i);i++;return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches';}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next');var input=document.querySelector('[data-target="'+id+'"]');var s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
 }
 
 export function CompassAiShell({ userEmail }: { userEmail: string }) {
@@ -529,6 +695,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [scorecards, setScorecards] = useState<ScorecardLibrary | null>(null);
   const [selectedResultId, setSelectedResultId] = useState("");
   const [status, setStatus] = useState("Loading CompassAi...");
+  const [cloudStatus, setCloudStatus] = useState("Not checked yet");
+  const [cloudCheckedAt, setCloudCheckedAt] = useState("");
   const [error, setError] = useState("");
   const [files, setFiles] = useState<FileList | null>(null);
   const [mirrorText, setMirrorText] = useState("");
@@ -538,6 +706,12 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [scorecardEditor, setScorecardEditor] = useState("");
+  const [scorecardName, setScorecardName] = useState("");
+  const [scorecardAliases, setScorecardAliases] = useState("");
+  const [universalRules, setUniversalRules] = useState("");
+  const [criticalRules, setCriticalRules] = useState("");
+  const [transcriptionModel, setTranscriptionModel] = useState(DEFAULT_TRANSCRIPTION_MODEL);
+  const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
   const [editingScorecardId, setEditingScorecardId] = useState("");
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
@@ -558,10 +732,14 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const refresh = useCallback(async () => {
     const stored = window.localStorage.getItem(JOB_STORAGE);
     if (stored) setJobs(JSON.parse(stored));
-    const key = window.localStorage.getItem(OPENAI_KEY_STORAGE) ?? "";
+    const key = cleanApiKey(window.localStorage.getItem(OPENAI_KEY_STORAGE) ?? "");
+    if (key) window.localStorage.setItem(OPENAI_KEY_STORAGE, key);
     setOpenaiApiKey(key);
     setApiKeyDraft(key);
+    setTranscriptionModel(window.localStorage.getItem(TRANSCRIPTION_MODEL_STORAGE) || DEFAULT_TRANSCRIPTION_MODEL);
+    setQaModel(window.localStorage.getItem(QA_MODEL_STORAGE) || DEFAULT_QA_MODEL);
     setStatus(key ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
+    setCloudStatus(key ? "Saved key; run connection test" : "No OpenAI key saved");
   }, []);
 
   useEffect(() => {
@@ -579,12 +757,16 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     if (!scorecards?.scorecards.length) return;
     const selected = scorecards.scorecards.find((entry) => entry.id === editingScorecardId) ?? activeScorecard(scorecards);
     setEditingScorecardId(selected?.id ?? "");
+    setScorecardName(selected?.name ?? "");
+    setScorecardAliases(patternsToText(selected));
+    setUniversalRules(rulesToText(selected?.bundle?.universal_rules));
+    setCriticalRules(rulesToText(selected?.bundle?.critical_checks));
     setScorecardEditor(JSON.stringify(selected?.bundle ?? {}, null, 2));
   }, [scorecards?.active_scorecard_id]);
 
   async function upload() {
     if (!files?.length || !scorecards) return;
-    if (!openaiApiKey.trim()) {
+    if (!cleanApiKey(openaiApiKey)) {
       setView("settings");
       setError("Paste and save your OpenAI API key before processing calls.");
       return;
@@ -614,16 +796,17 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           persistJobs(nextJobs);
         };
         update({ message: `Transcribing ${file.name}...`, progress: index / files.length + 0.05, percent: Math.round((index / files.length) * 100) });
-        const transcriptPayload = await transcribeDirect(file, openaiApiKey.trim());
+        const transcriptPayload = await transcribeDirect(file, cleanApiKey(openaiApiKey), transcriptionModel);
         const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
         let rows = ruleAnalysis.rows;
         let source = transcriptPayload.chunked
           ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
           : "OpenAI transcription via Vercel relay + browser rule scanner";
+        if (transcriptPayload.model_fallback) source += ` | ${transcriptPayload.model_fallback}`;
         let report = "";
         try {
           update({ message: `Running cloud QA for ${file.name}...`, progress: (index + 0.65) / files.length, percent: Math.round(((index + 0.65) / files.length) * 100) });
-          const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, openaiApiKey.trim());
+          const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
           if (Array.isArray(qa.rows) && qa.rows.length) {
             rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
             source = transcriptPayload.chunked
@@ -632,7 +815,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           }
         } catch (caught) {
           report = makeErrorReport("Cloud QA model request; browser rule scanner was used", caught, {
-            model: QA_MODEL,
+            model: qaModel,
             transcript_characters: transcriptPayload.transcript.length,
             scorecard: ruleAnalysis.entry.name,
           });
@@ -719,16 +902,27 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const entry = scorecards?.scorecards.find((item) => item.id === scorecardId);
     if (!entry) return;
     setEditingScorecardId(entry.id);
+    setScorecardName(entry.name);
+    setScorecardAliases(patternsToText(entry));
+    setUniversalRules(rulesToText(entry.bundle?.universal_rules));
+    setCriticalRules(rulesToText(entry.bundle?.critical_checks));
     setScorecardEditor(JSON.stringify(entry.bundle, null, 2));
   }
 
   function saveScorecardEdit(mode: "update" | "add") {
     if (!scorecards) return;
     try {
-      const bundle = JSON.parse(scorecardEditor);
+      const original = JSON.parse(scorecardEditor || "{}");
+      const bundle = {
+        ...original,
+        name: scorecardName.trim() || original.name || "Unnamed scorecard",
+        client_patterns: parsePatternText(scorecardAliases),
+        universal_rules: parseRuleText(universalRules, "Universal"),
+        critical_checks: parseRuleText(criticalRules, "Critical"),
+      };
       const entry: ScorecardEntry = {
         id: mode === "update" && editingScorecardId ? editingScorecardId : `${bundle.name || "scorecard"}-${Date.now()}`,
-        name: bundle.name || "Unnamed scorecard",
+        name: scorecardName.trim() || bundle.name || "Unnamed scorecard",
         bundle,
       };
       const next = mode === "update"
@@ -765,10 +959,12 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   }
 
   function saveOpenAiKey() {
-    const trimmed = apiKeyDraft.trim();
+    const trimmed = cleanApiKey(apiKeyDraft);
     window.localStorage.setItem(OPENAI_KEY_STORAGE, trimmed);
     setOpenaiApiKey(trimmed);
+    setApiKeyDraft(trimmed);
     setStatus(trimmed ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
+    setCloudStatus(trimmed ? "Saved key; run connection test" : "No OpenAI key saved");
     setError("");
   }
 
@@ -777,6 +973,63 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setApiKeyDraft("");
     setOpenaiApiKey("");
     setStatus("Paste your OpenAI API key in Settings");
+    setCloudStatus("No OpenAI key saved");
+  }
+
+  function saveModelSettings() {
+    window.localStorage.setItem(TRANSCRIPTION_MODEL_STORAGE, transcriptionModel);
+    window.localStorage.setItem(QA_MODEL_STORAGE, qaModel);
+    setStatus(`Model settings saved: ${transcriptionModel} transcription, ${qaModel} QA.`);
+  }
+
+  async function testOpenAiConnection() {
+    const key = cleanApiKey(openaiApiKey);
+    if (!key) {
+      setCloudStatus("No OpenAI key saved");
+      setView("settings");
+      return;
+    }
+    setCloudStatus("Checking OpenAI relay...");
+    setCloudCheckedAt(new Date().toLocaleTimeString());
+    try {
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: qaModel || DEFAULT_QA_MODEL,
+          messages: [{ role: "user", content: "Reply with OK only." }],
+          max_tokens: 5,
+        }),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 260)}`);
+      setCloudStatus(`Online: ${qaModel || DEFAULT_QA_MODEL} responded through CompassAi relay`);
+      setError("");
+    } catch (caught) {
+      if ((qaModel || DEFAULT_QA_MODEL) !== DEFAULT_QA_MODEL) {
+        try {
+          const fallback = await fetch("/api/openai/chat", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: DEFAULT_QA_MODEL,
+              messages: [{ role: "user", content: "Reply with OK only." }],
+              max_tokens: 5,
+            }),
+          });
+          if (fallback.ok) {
+            setCloudStatus(`Online with fallback: ${DEFAULT_QA_MODEL}. Selected model failed.`);
+            setError(makeErrorReport("Cloud LLM selected-model check", caught, { selected_model: qaModel, fallback_model: DEFAULT_QA_MODEL }));
+            return;
+          }
+        } catch {
+          // Preserve the original selected-model error below.
+        }
+      }
+      const report = makeErrorReport("Cloud LLM live connection check", caught, { selected_model: qaModel || DEFAULT_QA_MODEL });
+      setCloudStatus("Offline or rejected by OpenAI relay");
+      setError(report);
+    }
   }
 
   function clearJobs() {
@@ -805,7 +1058,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         </nav>
         <section className="side-card">
           <span>Cloud LLM Status</span>
-          <strong>{status}</strong>
+          <strong>{cloudStatus}</strong>
+          {cloudCheckedAt && <p>Last checked {cloudCheckedAt}</p>}
+          <button onClick={testOpenAiConnection} disabled={busy || !cleanApiKey(openaiApiKey)}>Test connection</button>
         </section>
         <section className="side-card">
           <span>Scorecards</span>
@@ -816,7 +1071,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       <main>
         <header className="topbar">
           <div>
-            <h2>Vercel-Only QA Workspace</h2>
+            <h2>CompassAi Web QA Workspace</h2>
             <p>Audio and QA run through CompassAi's Vercel relay using your OpenAI API key. Keep this tab open while processing.</p>
           </div>
           <button onClick={refresh} disabled={busy}>Refresh</button>
@@ -827,15 +1082,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <h3>Add recordings</h3>
             <div className="drop">
               <input type="file" multiple accept="audio/*,video/*" onChange={(event) => setFiles(event.target.files)} />
-              <button className="primary" disabled={busy || !files?.length || !openaiApiKey.trim()} onClick={upload}>
+              <button className="primary" disabled={busy || !files?.length || !cleanApiKey(openaiApiKey)} onClick={upload}>
                 {busy ? "Processing..." : "Upload and process"}
               </button>
             </div>
-            {!openaiApiKey.trim() && <p className="hint">Add your OpenAI API key in Settings before uploading recordings.</p>}
+            {!cleanApiKey(openaiApiKey) && <p className="hint">Add your OpenAI API key in Settings before uploading recordings.</p>}
             <div className="button-row">
               <button onClick={clearJobs} disabled={busy || !jobs.length}>Clear local jobs</button>
             </div>
-            <JobList jobs={jobs} selectedResultId={selectedResultId} select={setSelectedResultId} removeJob={removeJob} />
+            <JobList jobs={jobs} selectedResultId={selectedResultId} select={setSelectedResultId} removeJob={removeJob} mirrorLeads={mirrorLeads} />
           </section>
         )}
         {view === "review" && (
@@ -848,6 +1103,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             persistJobs={persistJobs}
             jobs={jobs}
             setError={setError}
+            mirrorLeads={mirrorLeads}
           />
         )}
         {view === "scorecards" && (
@@ -855,7 +1111,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <div className="panel-title">
               <div>
                 <h3>Scorecards</h3>
-                <p>Manage the same JSON scorecard bundles CompassQA uses. Changes are saved in this browser.</p>
+                <p>Edit scorecard names, client aliases, qualifiers, and critical checks. Changes are saved in this browser.</p>
               </div>
               <button onClick={resetBundledScorecards} disabled={busy}>Restore bundled</button>
             </div>
@@ -892,8 +1148,23 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                 ))}
               </div>
               <div className="scorecard-editor">
-                <h4>{editingScorecardId ? "Edit scorecard JSON" : "Add scorecard JSON"}</h4>
-                <textarea value={scorecardEditor} onChange={(event) => setScorecardEditor(event.target.value)} spellCheck={false} />
+                <h4>{editingScorecardId ? "Edit scorecard" : "Add scorecard"}</h4>
+                <label>Scorecard name
+                  <input value={scorecardName} onChange={(event) => setScorecardName(event.target.value)} placeholder="Feldco" />
+                </label>
+                <label>Client aliases and detection patterns
+                  <textarea className="short-editor" value={scorecardAliases} onChange={(event) => setScorecardAliases(event.target.value)} placeholder="Feldco: feldco, feldco windows" />
+                </label>
+                <label>Universal qualifiers
+                  <textarea className="short-editor" value={universalRules} onChange={(event) => setUniversalRules(event.target.value)} placeholder="Homeowner confirmed | homeowner|decision maker | renter|not homeowner" />
+                </label>
+                <label>Critical checks
+                  <textarea className="short-editor" value={criticalRules} onChange={(event) => setCriticalRules(event.target.value)} placeholder="No unapproved quote | free quote|estimate | price guaranteed" />
+                </label>
+                <details>
+                  <summary>Advanced JSON</summary>
+                  <textarea value={scorecardEditor} onChange={(event) => setScorecardEditor(event.target.value)} spellCheck={false} />
+                </details>
                 <div className="button-row">
                   <button className="primary" onClick={() => saveScorecardEdit("update")} disabled={!editingScorecardId}>Save selected</button>
                   <button onClick={() => saveScorecardEdit("add")}>Save as new</button>
@@ -905,11 +1176,12 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         {view === "mirrorcxt" && (
           <section className="panel">
             <h3>MirrorCXT import</h3>
+            <p className="hint">
+              Upload a MirrorCXT HTML export before or after transcribing. CompassAi matches saved leads to calls by phone/name and then shows the Clover link, customer details, and relevant lead info in review queues and exported reports.
+            </p>
             <label>Upload MirrorCXT HTML export
               <input type="file" accept=".html,.htm,.txt,text/html,text/plain" onChange={(event) => importMirrorFile(event.target.files?.[0] ?? null)} />
             </label>
-            <textarea value={mirrorText} onChange={(event) => setMirrorText(event.target.value)} placeholder="Paste MirrorCXT HTML export here..." />
-            <button className="primary" onClick={() => parseMirror()} disabled={busy || !mirrorText.trim()}>Import MirrorCXT</button>
             <p>{mirrorLeads.length} Clover/MirrorCXT lead(s) loaded for reports.</p>
             <div className="mirror-list">
               {mirrorLeads.map((lead) => (
@@ -934,13 +1206,31 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               <div className="button-row">
                 <button className="primary" onClick={saveOpenAiKey}>Save key in this browser</button>
                 <button onClick={clearOpenAiKey}>Clear key</button>
+                <button onClick={testOpenAiConnection} disabled={!cleanApiKey(openaiApiKey)}>Test OpenAI connection</button>
               </div>
               <p className="hint">Your key stays in this browser's local storage. CompassAi sends it only to its same-origin Vercel relay for OpenAI transcription and QA.</p>
             </div>
+            <div className="api-key-box">
+              <label>Transcription model
+                <select value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)}>
+                  {TRANSCRIPTION_MODELS.map((model) => <option key={model}>{model}</option>)}
+                </select>
+              </label>
+              <label>QA model
+                <select value={qaModel} onChange={(event) => setQaModel(event.target.value)}>
+                  {QA_MODELS.map((model) => <option key={model}>{model}</option>)}
+                </select>
+              </label>
+              <div className="button-row">
+                <button className="primary" onClick={saveModelSettings}>Save model settings</button>
+              </div>
+              <p className="hint">If a selected transcription model is unavailable, CompassAi automatically falls back to {DEFAULT_TRANSCRIPTION_MODEL}. Use Test OpenAI connection to confirm the cloud QA model and API key are working.</p>
+            </div>
             <div className="settings-grid">
-              <div><span>Hosting</span><strong>Vercel only</strong><p>No Render, no database, no server-owned OpenAI key.</p></div>
-              <div><span>Transcription</span><strong>{TRANSCRIPTION_MODEL}</strong><p>Recordings are sent through CompassAi's same-origin Vercel relay to avoid browser fetch failures.</p></div>
-              <div><span>QA model</span><strong>{QA_MODEL}</strong><p>If cloud QA fails, CompassAi falls back to browser rule scanning and shows a copyable error report.</p></div>
+              <div><span>Hosting</span><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
+              <div><span>Transcription</span><strong>{transcriptionModel}</strong><p>Recordings are sent through CompassAi's same-origin Vercel relay to avoid browser fetch failures.</p></div>
+              <div><span>QA model</span><strong>{qaModel}</strong><p>If cloud QA fails, CompassAi falls back to browser rule scanning and shows a copyable error report.</p></div>
+              <div><span>Cloud LLM Status</span><strong>{cloudStatus}</strong><p>{cloudCheckedAt ? `Last checked ${cloudCheckedAt}.` : "Use Test OpenAI connection for live API status."}</p></div>
             </div>
           </section>
         )}
@@ -949,6 +1239,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <h3>Final report</h3>
             <button className="primary" disabled={!results.length || busy} onClick={exportReport}>Generate HTML report</button>
           </div>
+          {reportHtml && (
+            <a
+              className="download-link"
+              download={`CompassAi_QA_Report_${new Date().toISOString().slice(0, 10)}.html`}
+              href={`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`}
+            >
+              Download styled HTML report
+            </a>
+          )}
           {reportHtml && <iframe title="CompassAi report preview" srcDoc={reportHtml} />}
         </section>
       </main>
@@ -956,7 +1255,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   );
 }
 
-function JobList({ jobs, selectedResultId, select, removeJob }: { jobs: Job[]; selectedResultId: string; select: (id: string) => void; removeJob: (id: string) => void }) {
+function JobList({ jobs, selectedResultId, select, removeJob, mirrorLeads }: { jobs: Job[]; selectedResultId: string; select: (id: string) => void; removeJob: (id: string) => void; mirrorLeads: MirrorLead[] }) {
   return (
     <div className="job-list">
       {jobs.map((job) => (
@@ -970,7 +1269,7 @@ function JobList({ jobs, selectedResultId, select, removeJob }: { jobs: Job[]; s
           {(job.source_files ?? []).map((file) => <small key={file}>{file}</small>)}
           {job.results.map((result) => (
             <button key={result.result_id} className={selectedResultId === result.result_id ? "result active" : "result"} onClick={() => select(result.result_id)}>
-              {titleFor(result)}
+              {titleFor(result, mirrorLeads)}
             </button>
           ))}
           {job.error_report && <textarea readOnly value={job.error_report} />}
@@ -988,6 +1287,7 @@ function ReviewPanel({
   jobs,
   persistJobs,
   setError,
+  mirrorLeads,
 }: {
   item?: { job: Job; result: JobResult };
   allResults: { job: Job; result: JobResult }[];
@@ -997,6 +1297,7 @@ function ReviewPanel({
   jobs: Job[];
   persistJobs: (jobs: Job[]) => void;
   setError: (message: string) => void;
+  mirrorLeads: MirrorLead[];
 }) {
   const [rows, setRows] = useState<EditorRow[]>([]);
   const [finalGrade, setFinalGrade] = useState("Approved");
@@ -1045,12 +1346,17 @@ function ReviewPanel({
 
   if (!item) return <section className="panel"><h3>QA review</h3><p>No completed calls yet.</p></section>;
   const result = item.result;
+  const meta = callMeta(result, mirrorLeads);
   return (
     <section className="panel">
       <div className="panel-title">
         <div>
-          <h3>{titleFor(result)}</h3>
+          <h3>{titleFor(result, mirrorLeads)}</h3>
           <p>{result.analysis.source} | Score {result.metrics?.qa_score ?? 0}% | {result.metrics?.outcome}</p>
+          <p className="hint">
+            Agent: {meta.agent || "not detected"} | Customer: {meta.customer || "not matched"} | Phone: {meta.phone ? formatPhone(meta.phone) : "not matched"}
+            {meta.clover && <> | <a href={meta.clover} target="_blank" rel="noreferrer">Open Clover matched lead</a></>}
+          </p>
         </div>
         <button className="primary" onClick={save}>Save QA overrides</button>
       </div>
@@ -1063,17 +1369,24 @@ function ReviewPanel({
         <select value={selectedResultId || result.result_id} onChange={(event) => select(event.target.value)}>
           {allResults.map(({ result }) => (
             <option key={result.result_id} value={result.result_id}>
-              {titleFor(result)}
+              {titleFor(result, mirrorLeads)}{callMeta(result, mirrorLeads).clover ? " | Clover matched" : ""}
             </option>
           ))}
         </select>
         <div className="review-call-list">
-          {allResults.map(({ result }) => (
-            <button key={result.result_id} className={result.result_id === item.result.result_id ? "active" : ""} onClick={() => select(result.result_id)}>
-              <strong>{result.file_name}</strong>
-              <span>{result.analysis.client || "Unknown"} | {result.analysis.scorecard_name || "No scorecard"} | {result.metrics?.qa_score ?? 0}%</span>
-            </button>
-          ))}
+          {allResults.map(({ result }) => {
+            const details = callMeta(result, mirrorLeads);
+            return (
+              <article key={result.result_id} className={result.result_id === item.result.result_id ? "active" : ""}>
+                <button onClick={() => select(result.result_id)}>
+                  <strong>{result.file_name}</strong>
+                  <span>{result.analysis.client || "Unknown"} | {result.analysis.scorecard_name || "No scorecard"} | {result.metrics?.qa_score ?? 0}%</span>
+                  <span>Agent: {details.agent || "not detected"} | Customer: {details.customer || "not matched"} | Phone: {details.phone ? formatPhone(details.phone) : "not matched"}</span>
+                </button>
+                {details.clover && <a href={details.clover} target="_blank" rel="noreferrer">Open Clover</a>}
+              </article>
+            );
+          })}
         </div>
       </div>
       <div className="review-grid">
