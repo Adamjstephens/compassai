@@ -1,6 +1,34 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AudioLines,
+  Bot,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  Clock3,
+  Download,
+  ExternalLink,
+  FileAudio,
+  FileOutput,
+  Gauge,
+  Library,
+  Menu,
+  Moon,
+  RefreshCw,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sun,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from "lucide-react";
+
+type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
 type ScorecardRule = {
   name: string;
@@ -96,7 +124,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.4.1";
+const APP_VERSION = "0.5.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -864,7 +892,7 @@ function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
 }
 
 export function CompassAiShell({ userEmail }: { userEmail: string }) {
-  const [view, setView] = useState<"jobs" | "review" | "scorecards" | "mirrorcxt" | "settings">("jobs");
+  const [view, setView] = useState<AppView>("jobs");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [scorecards, setScorecards] = useState<ScorecardLibrary | null>(null);
   const [selectedResultId, setSelectedResultId] = useState("");
@@ -886,11 +914,48 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [editingScorecardId, setEditingScorecardId] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
   const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
+  const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
   const selected = results.find((item) => item.result.result_id === selectedResultId) ?? results[0];
+
+  const updateLocation = useCallback((nextView: AppView, resultId = "", mode: "push" | "replace" = "push") => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", nextView);
+    if (nextView === "review" && resultId) url.searchParams.set("result", resultId);
+    else url.searchParams.delete("result");
+    window.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url);
+  }, []);
+
+  const focusReview = useCallback(() => {
+    window.setTimeout(() => {
+      reviewHeadingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      reviewHeadingRef.current?.focus({ preventScroll: true });
+    }, 60);
+  }, []);
+
+  const openReview = useCallback((resultId: string, mode: "push" | "replace" = "push") => {
+    if (!results.some(({ result }) => result.result_id === resultId)) return;
+    setSelectedResultId(resultId);
+    setView("review");
+    setSidebarOpen(false);
+    updateLocation("review", resultId, mode);
+    focusReview();
+  }, [focusReview, results, updateLocation]);
+
+  const navigateToView = useCallback((nextView: AppView, mode: "push" | "replace" = "push") => {
+    if (nextView === "review" && results.length) {
+      openReview(selectedResultId && results.some(({ result }) => result.result_id === selectedResultId) ? selectedResultId : results[0].result.result_id, mode);
+      return;
+    }
+    setView(nextView);
+    setSidebarOpen(false);
+    updateLocation(nextView, "", mode);
+  }, [openReview, results, selectedResultId, updateLocation]);
 
   function focusScorecardEditor() {
     window.setTimeout(() => {
@@ -924,6 +989,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setTheme(window.localStorage.getItem(THEME_STORAGE) === "dark" ? "dark" : "light");
     setStatus(key ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
     setCloudStatus(key ? "Saved key; run connection test" : "No OpenAI key saved");
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -951,10 +1017,39 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     window.localStorage.setItem(THEME_STORAGE, theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    const applyUrl = (replaceStale = false) => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedView = params.get("view") as AppView | null;
+      const validViews: AppView[] = ["jobs", "review", "scorecards", "mirrorcxt", "settings"];
+      const nextView = requestedView && validViews.includes(requestedView) ? requestedView : "jobs";
+      if (nextView === "review") {
+        const requestedResult = params.get("result") || "";
+        const match = results.find(({ result }) => result.result_id === requestedResult);
+        const fallback = match ?? results[0];
+        if (fallback) {
+          setSelectedResultId(fallback.result.result_id);
+          setView("review");
+          if (!match && replaceStale) updateLocation("review", fallback.result.result_id, "replace");
+          return;
+        }
+        setView("jobs");
+        if (replaceStale) updateLocation("jobs", "", "replace");
+        return;
+      }
+      setView(nextView);
+    };
+    applyUrl(true);
+    const onPopState = () => applyUrl(true);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [hydrated, results, updateLocation]);
+
   async function upload() {
     if (!files?.length || !scorecards) return;
     if (!cleanApiKey(openaiApiKey)) {
-      setView("settings");
+      navigateToView("settings");
       setError("Paste and save your OpenAI API key before processing calls.");
       return;
     }
@@ -1083,6 +1178,16 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     persistJobs(jobs.filter((job) => job.job_id !== jobId));
   }
 
+  function removeResult(jobId: string, resultId: string) {
+    const next = jobs.flatMap((job) => {
+      if (job.job_id !== jobId) return [job];
+      const remaining = job.results.filter((result) => result.result_id !== resultId);
+      return remaining.length || job.status !== "complete" ? [{ ...job, results: remaining }] : [];
+    });
+    persistJobs(next);
+    if (selectedResultId === resultId) setSelectedResultId(next.flatMap((job) => job.results)[0]?.result_id ?? "");
+  }
+
   function parseMirror(value = mirrorText) {
     const leads = parseMirrorText(value);
     setMirrorLeads(leads);
@@ -1121,7 +1226,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   function editScorecard(scorecardId: string) {
     const entry = scorecards?.scorecards.find((item) => item.id === scorecardId);
     if (!entry) return;
-    setView("scorecards");
+    navigateToView("scorecards");
     setEditingScorecardId(entry.id);
     setScorecardName(entry.name);
     setRubricRows(rubricRowsFromEntry(entry));
@@ -1225,7 +1330,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const key = cleanApiKey(openaiApiKey);
     if (!key) {
       setCloudStatus("No OpenAI key saved");
-      setView("settings");
+      navigateToView("settings");
       return;
     }
     setCloudStatus("Checking OpenAI relay...");
@@ -1275,11 +1380,28 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     persistJobs([]);
     setSelectedResultId("");
     setReportHtml("");
+    navigateToView("jobs", "replace");
   }
+
+  const navItems: { id: AppView; label: string; icon: typeof AudioLines }[] = [
+    { id: "jobs", label: "Jobs", icon: AudioLines },
+    { id: "review", label: "Review", icon: ClipboardCheck },
+    { id: "scorecards", label: "Scorecards", icon: Library },
+    { id: "mirrorcxt", label: "MirrorCXT", icon: Users },
+    { id: "settings", label: "Settings", icon: Settings },
+  ];
+  const viewMeta: Record<AppView, { title: string; description: string }> = {
+    jobs: { title: "Call processing", description: "Upload recordings, monitor live progress, and open completed QA reviews." },
+    review: { title: "QA review", description: "Verify evidence, adjust qualifier decisions, and finalize each call." },
+    scorecards: { title: "Scorecard library", description: "Manage client detection and build plain-language grading rubrics." },
+    mirrorcxt: { title: "MirrorCXT matching", description: "Import saved leads to add customer context and Clover links to matching calls." },
+    settings: { title: "Workspace settings", description: "Manage appearance, cloud AI access, models, and browser-stored data." },
+  };
 
   return (
     <div className="app-shell">
-      <aside>
+      {sidebarOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`app-sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand">
           <img src="/logo512.png" alt="" />
           <div>
@@ -1287,58 +1409,83 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <span className="version-label">Version {APP_VERSION}</span>
             <p>{userEmail}</p>
           </div>
+          <button className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
-        <nav>
-          {(["jobs", "review", "scorecards", "mirrorcxt", "settings"] as const).map((item) => (
-            <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>
-              {item === "mirrorcxt" ? "MirrorCXT" : item[0].toUpperCase() + item.slice(1)}
+        <nav className="app-nav" aria-label="Workspace navigation">
+          {navItems.map(({ id, label, icon: Icon }) => (
+            <button key={id} data-testid={`nav-${id}`} className={view === id ? "active" : ""} onClick={() => navigateToView(id)}>
+              <Icon size={18} />
+              <span>{label}</span>
+              {id === "review" && results.length > 0 && <small>{results.length}</small>}
             </button>
           ))}
         </nav>
-        <section className="side-card">
-          <span>Cloud LLM Status</span>
+        <section className="side-card status-card">
+          <div className="side-card-title"><Bot size={16} /><span>Cloud LLM</span></div>
           <strong>{cloudStatus}</strong>
           {cloudCheckedAt && <p>Last checked {cloudCheckedAt}</p>}
-          <button onClick={testOpenAiConnection} disabled={busy || !cleanApiKey(openaiApiKey)}>Test connection</button>
+          <button onClick={testOpenAiConnection} disabled={busy || !cleanApiKey(openaiApiKey)}><RefreshCw size={15} /> Test connection</button>
         </section>
-        <section className="side-card">
-          <span>Scorecards</span>
+        <section className="side-card status-card">
+          <div className="side-card-title"><ShieldCheck size={16} /><span>Scorecards</span></div>
           <strong>{scorecards?.scorecards.length ?? 0} loaded</strong>
-          <p>{scorecards?.required_clients_available ? "Feldco, Bachmans, KQR, Pella, and RbA/QWD ready." : "Required client check pending."}</p>
+          <p>{scorecards?.required_clients_available ? "Required client library ready." : "Required client check pending."}</p>
         </section>
       </aside>
       <main>
         <header className="topbar">
+          <button className="icon-button menu-button" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <div>
-            <h2>CompassAi Web QA Workspace</h2>
-            <p>Audio and QA run through CompassAi's Vercel relay using your OpenAI API key. Keep this tab open while processing.</p>
+            <span className="eyebrow">CompassAi QA workstation</span>
+            <h2>{viewMeta[view].title}</h2>
+            <p>{viewMeta[view].description}</p>
           </div>
-          <button onClick={refresh} disabled={busy}>Refresh</button>
+          <button className="topbar-action" onClick={refresh} disabled={busy}><RefreshCw size={16} /> Refresh</button>
         </header>
+        {status && <div className="notice status-notice" role="status"><CheckCircle2 size={17} /><span>{status}</span></div>}
         {error && <div className="notice error">{error}</div>}
         {view === "jobs" && (
-          <section className="panel">
-            <h3>Add recordings</h3>
-            <div className="drop">
-              <input type="file" multiple accept="audio/*,video/*" onChange={(event) => setFiles(event.target.files)} />
-              <button className="primary" disabled={busy || !files?.length || !cleanApiKey(openaiApiKey)} onClick={upload}>
-                {busy ? "Processing..." : "Upload and process"}
-              </button>
-            </div>
-            {!cleanApiKey(openaiApiKey) && <p className="hint">Add your OpenAI API key in Settings before uploading recordings.</p>}
-            <div className="button-row">
-              <button onClick={clearJobs} disabled={busy || !jobs.length}>Clear local jobs</button>
-            </div>
-            <JobList jobs={jobs} selectedResultId={selectedResultId} select={setSelectedResultId} removeJob={removeJob} mirrorLeads={mirrorLeads} />
-          </section>
+          <>
+            <section className="panel upload-panel">
+              <div className="section-heading">
+                <div className="section-icon"><Upload size={20} /></div>
+                <div><h3>Add recordings</h3><p>Choose one or more audio or video files. Each call is detected and graded independently.</p></div>
+              </div>
+              <div className="drop">
+                <input aria-label="Choose call recordings" type="file" multiple accept="audio/*,video/*" onChange={(event) => setFiles(event.target.files)} />
+                <button className="primary" disabled={busy || !files?.length || !cleanApiKey(openaiApiKey)} onClick={upload}>
+                  <AudioLines size={17} /> {busy ? "Processing calls..." : "Upload and process"}
+                </button>
+              </div>
+              {!cleanApiKey(openaiApiKey) && <button className="inline-notice" onClick={() => navigateToView("settings")}>Add your OpenAI API key in Settings before uploading recordings.</button>}
+            </section>
+            <JobList
+              jobs={jobs}
+              selectedResultId={selectedResultId}
+              openReview={openReview}
+              removeJob={removeJob}
+              removeResult={removeResult}
+              mirrorLeads={mirrorLeads}
+              clearJobs={clearJobs}
+              busy={busy}
+            />
+            <section className="panel report-workspace">
+              <div className="section-heading report-heading">
+                <div className="section-icon"><FileOutput size={20} /></div>
+                <div><h3>Final report</h3><p>{results.length} completed call(s) available for the styled batch report.</p></div>
+                <button className="primary" disabled={!results.length || busy} onClick={exportReport}><FileOutput size={17} /> Generate report</button>
+              </div>
+              {reportHtml && <div className="report-actions"><a className="download-link" download={`CompassAi_QA_Report_${new Date().toISOString().slice(0, 10)}.html`} href={`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`}><Download size={16} /> Download styled HTML report</a></div>}
+              {reportHtml && <iframe title="CompassAi report preview" srcDoc={reportHtml} />}
+            </section>
+          </>
         )}
         {view === "review" && (
           <ReviewPanel
             item={selected}
             allResults={results}
-            selectedResultId={selectedResultId}
-            select={setSelectedResultId}
-            refresh={refresh}
+            select={openReview}
+            headingRef={reviewHeadingRef}
             persistJobs={persistJobs}
             jobs={jobs}
             setError={setError}
@@ -1346,13 +1493,14 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           />
         )}
         {view === "scorecards" && (
-          <section className="panel">
+          <section className="panel screen-panel scorecard-screen">
             <div className="panel-title">
               <div>
-                <h3>Scorecards</h3>
-                <p>Build and edit scorecards with plain-language rubric rows. Changes are saved in this browser.</p>
+                <span className="eyebrow">Rubric manager</span>
+                <h3>Client scorecards</h3>
+                <p>Build and edit scorecards with plain-language qualifier rows. Changes are saved in this browser.</p>
               </div>
-              <button onClick={resetBundledScorecards} disabled={busy}>Restore bundled</button>
+              <button onClick={resetBundledScorecards} disabled={busy}><RefreshCw size={16} /> Restore bundled</button>
             </div>
             <div className="scorecard-tools">
               <label>Active scorecard
@@ -1365,12 +1513,14 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               </label>
               {scorecards && (
                 <a className="download-link" download="compassai_scorecards.json" href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(scorecards, null, 2))}`}>
-                  Download scorecards JSON
+                  <Download size={16} /> Download library
                 </a>
               )}
             </div>
             <div className="scorecard-layout">
-              <div className="scorecard-list">
+              <div className="scorecard-library">
+                <div className="subsection-heading"><div><h4>Library</h4><p>{scorecards?.scorecards.length ?? 0} available scorecards</p></div></div>
+                <div className="scorecard-list">
                 {scorecards?.scorecards.map((entry) => (
                   <article key={entry.id} className={entry.id === editingScorecardId ? "selected" : ""}>
                     <div>
@@ -1385,9 +1535,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                     </div>
                   </article>
                 ))}
+                </div>
               </div>
               <div className="scorecard-editor" ref={scorecardEditorRef} tabIndex={-1}>
-                <h4>{editingScorecardId ? "Edit scorecard" : "Add scorecard"}</h4>
+                <div className="subsection-heading"><div><h4>{editingScorecardId ? "Edit scorecard" : "Add scorecard"}</h4><p>Define client detection and grading expectations.</p></div></div>
                 <div className="rubric-header">
                   <label>Scorecard name
                     <input ref={scorecardNameInputRef} value={scorecardName} onChange={(event) => setScorecardName(event.target.value)} placeholder="Feldco" />
@@ -1443,40 +1594,42 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           </section>
         )}
         {view === "mirrorcxt" && (
-          <section className="panel">
-            <h3>MirrorCXT import</h3>
+          <section className="panel screen-panel mirror-screen">
+            <div className="panel-title"><div><span className="eyebrow">Lead context</span><h3>MirrorCXT import</h3><p>Match saved leads to completed calls using customer names and phone numbers.</p></div></div>
             <p className="hint">
               Upload a MirrorCXT HTML export before or after transcribing. CompassAi matches saved leads to calls by phone/name and then shows the Clover link, customer details, and relevant lead info in review queues and exported reports.
             </p>
-            <label>Upload MirrorCXT HTML export
+            <label className="file-drop"><Upload size={22} /><span>Upload MirrorCXT HTML export</span>
               <input type="file" accept=".html,.htm,.txt,text/html,text/plain" onChange={(event) => importMirrorFile(event.target.files?.[0] ?? null)} />
             </label>
-            <p>{mirrorLeads.length} Clover/MirrorCXT lead(s) loaded for reports.</p>
+            <div className="import-summary"><div><span>Imported leads</span><strong>{mirrorLeads.length}</strong></div><div><span>Clover links</span><strong>{mirrorLeads.filter((lead) => lead.clover_url).length}</strong></div><div><span>Matched calls</span><strong>{results.filter(({ result }) => callMeta(result, mirrorLeads).clover).length}</strong></div></div>
             <div className="mirror-list">
               {mirrorLeads.map((lead) => (
                 <article key={lead.id}>
                   <strong>{lead.disposition || "MirrorCXT lead"}</strong>
                   <p>{lead.label}</p>
                   {lead.phone && <small>{lead.phone}</small>}
-                  {lead.clover_url && <a href={lead.clover_url} target="_blank" rel="noreferrer">Open Clover</a>}
+                  {lead.clover_url && <a href={lead.clover_url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
                 </article>
               ))}
             </div>
           </section>
         )}
         {view === "settings" && (
-          <section className="panel">
-            <h3>Settings</h3>
-            <div className="api-key-box">
-              <label>Appearance:
+          <section className="panel screen-panel settings-screen">
+            <div className="panel-title"><div><span className="eyebrow">Preferences</span><h3>Workspace settings</h3><p>Settings and sensitive credentials remain stored in this browser.</p></div></div>
+            <div className="settings-sections">
+            <div className="api-key-box setting-card">
+              <div className="setting-card-title">{theme === "dark" ? <Moon size={19} /> : <Sun size={19} />}<div><h4>Appearance</h4><p>Choose your preferred workspace theme.</p></div></div>
+              <label>Color theme
                 <select value={theme} onChange={(event) => setTheme(event.target.value === "dark" ? "dark" : "light")}>
                   <option value="light">Light mode</option>
                   <option value="dark">Dark mode</option>
                 </select>
               </label>
-              <p className="hint">Choose the display mode that is easiest to review in. Your preference is saved in this browser.</p>
             </div>
-            <div className="api-key-box">
+            <div className="api-key-box setting-card">
+              <div className="setting-card-title"><ShieldCheck size={19} /><div><h4>OpenAI access</h4><p>Connect transcription and QA through your API key.</p></div></div>
               <label>
                 OpenAI API key
                 <input type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} placeholder="sk-..." autoComplete="off" />
@@ -1488,7 +1641,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               </div>
               <p className="hint">Your key stays in this browser's local storage. CompassAi sends it only to its same-origin Vercel relay for OpenAI transcription and QA.</p>
             </div>
-            <div className="api-key-box">
+            <div className="api-key-box setting-card">
+              <div className="setting-card-title"><Bot size={19} /><div><h4>AI models</h4><p>Select preferred cloud models with automatic fallback.</p></div></div>
               <label>Transcription model
                 <select value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)}>
                   {TRANSCRIPTION_MODELS.map((model) => <option key={model}>{model}</option>)}
@@ -1504,6 +1658,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               </div>
               <p className="hint">If a selected transcription model is unavailable, CompassAi automatically falls back to {DEFAULT_TRANSCRIPTION_MODEL}. Use Test OpenAI connection to confirm the cloud QA model and API key are working.</p>
             </div>
+            <div className="api-key-box setting-card browser-data-card">
+              <div className="setting-card-title"><Trash2 size={19} /><div><h4>Browser data</h4><p>Jobs, scorecard edits, and preferences are stored locally in this browser.</p></div></div>
+              <button onClick={clearJobs} disabled={busy || !jobs.length}><Trash2 size={16} /> Clear local jobs and reports</button>
+            </div>
+            </div>
             <div className="settings-grid">
               <div><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
               <div><strong>{transcriptionModel}</strong><p>Used for audio transcription through CompassAi's same-origin relay.</p></div>
@@ -1513,59 +1672,111 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             </div>
           </section>
         )}
-        <section className="panel">
-          <div className="panel-title">
-            <h3>Final report</h3>
-            <button className="primary" disabled={!results.length || busy} onClick={exportReport}>Generate HTML report</button>
-          </div>
-          {reportHtml && (
-            <a
-              className="download-link"
-              download={`CompassAi_QA_Report_${new Date().toISOString().slice(0, 10)}.html`}
-              href={`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`}
-            >
-              Download styled HTML report
-            </a>
-          )}
-          {reportHtml && <iframe title="CompassAi report preview" srcDoc={reportHtml} />}
-        </section>
       </main>
     </div>
   );
 }
 
-function JobList({ jobs, selectedResultId, select, removeJob, mirrorLeads }: { jobs: Job[]; selectedResultId: string; select: (id: string) => void; removeJob: (id: string) => void; mirrorLeads: MirrorLead[] }) {
+function JobList({
+  jobs,
+  selectedResultId,
+  openReview,
+  removeJob,
+  removeResult,
+  mirrorLeads,
+  clearJobs,
+  busy,
+}: {
+  jobs: Job[];
+  selectedResultId: string;
+  openReview: (id: string) => void;
+  removeJob: (id: string) => void;
+  removeResult: (jobId: string, resultId: string) => void;
+  mirrorLeads: MirrorLead[];
+  clearJobs: () => void;
+  busy: boolean;
+}) {
+  const processing = jobs.filter((job) => job.status === "queued" || job.status === "running");
+  const failed = jobs.filter((job) => job.status === "failed");
+  const completed = jobs.flatMap((job) => job.results.map((result) => ({ job, result })));
+
   return (
-    <div className="job-list">
-      {jobs.map((job) => (
-        <article key={job.job_id} className="job-card">
-          <div className="job-head">
-            <div>
-              <strong>{job.status.toUpperCase()}</strong>
-              <p>{job.message}</p>
-            </div>
-            <button onClick={() => removeJob(job.job_id)}>Remove</button>
+    <div className="job-workspace">
+      {processing.length > 0 && (
+        <section className="panel queue-section" aria-labelledby="processing-heading">
+          <div className="section-heading compact">
+            <div className="section-icon live"><Gauge size={19} /></div>
+            <div><h3 id="processing-heading">Processing</h3><p>{processing.length} active batch{processing.length === 1 ? "" : "es"}</p></div>
           </div>
-          <div className="progress-row">
-            <progress value={job.progress} max={1} />
-            <strong>{job.percent}%</strong>
+          <div className="processing-list">
+            {processing.map((job) => (
+              <article key={job.job_id} className="job-card processing-card">
+                <div className="job-head">
+                  <div><span className="status-chip running">{job.status}</span><strong>{job.message}</strong></div>
+                  <button className="icon-button danger-button" aria-label="Remove processing job" title="Remove job" onClick={() => removeJob(job.job_id)}><Trash2 size={17} /></button>
+                </div>
+                <div className="progress-row"><progress value={job.progress} max={1} /><strong>{job.percent}%</strong></div>
+                <div className="job-metrics">
+                  <span><Clock3 size={15} /> Elapsed <strong>{fmtSeconds(job.elapsed_seconds)}</strong></span>
+                  <span><Gauge size={15} /> ETA <strong>{job.eta_seconds ? fmtSeconds(job.eta_seconds) : "Calculating"}</strong></span>
+                  <span><FileAudio size={15} /> Files <strong>{job.results.length}/{job.source_files?.length ?? job.results.length}</strong></span>
+                </div>
+                <div className="source-files">{(job.source_files ?? []).map((file) => <small key={file}>{file}</small>)}</div>
+              </article>
+            ))}
           </div>
-          <div className="job-metrics">
-            <span>Elapsed <strong>{fmtSeconds(job.elapsed_seconds)}</strong></span>
-            <span>ETA <strong>{job.status === "complete" ? "Done" : job.eta_seconds ? fmtSeconds(job.eta_seconds) : "Calculating"}</strong></span>
-            <span>Files <strong>{job.results.length}/{job.source_files?.length ?? job.results.length}</strong></span>
+        </section>
+      )}
+
+      <section className="panel queue-section" aria-labelledby="completed-heading">
+        <div className="section-heading compact queue-heading">
+          <div className="section-icon"><CheckCircle2 size={19} /></div>
+          <div><h3 id="completed-heading">Completed calls</h3><p>{completed.length} call{completed.length === 1 ? "" : "s"} ready to review</p></div>
+          <button onClick={clearJobs} disabled={busy || !jobs.length}><Trash2 size={16} /> Clear all</button>
+        </div>
+        {completed.length === 0 ? (
+          <div className="empty-state"><FileAudio size={28} /><strong>No completed calls yet</strong><p>Processed calls will appear here as individual QA cards.</p></div>
+        ) : (
+          <div className="completed-grid">
+            {completed.map(({ job, result }) => {
+              const meta = callMeta(result, mirrorLeads);
+              const score = result.metrics?.qa_score ?? 0;
+              const outcome = result.metrics?.outcome || "Needs review";
+              return (
+                <article key={result.result_id} data-testid={`completed-call-${result.result_id}`} className={`completed-card ${selectedResultId === result.result_id ? "selected" : ""}`}>
+                  <button className="completed-card-main" onClick={() => openReview(result.result_id)} aria-label={`Review QA for ${result.file_name}`}>
+                    <div className="completed-card-top">
+                      <span className={`score-orb ${score >= 80 ? "pass" : score >= 60 ? "review" : "fail"}`}>{score}%</span>
+                      <div className="completed-title"><strong>{result.file_name}</strong><span>{result.analysis.client || "Unknown client"} · {result.analysis.scorecard_name || "No scorecard"}</span></div>
+                      <ChevronRight size={20} />
+                    </div>
+                    <div className="card-tags"><span>{outcome}</span>{meta.clover && <span className="matched">Clover matched</span>}</div>
+                    <dl className="call-facts">
+                      <div><dt>Agent</dt><dd>{meta.agent || "Not detected"}</dd></div>
+                      <div><dt>Customer</dt><dd>{meta.customer || "Not matched"}</dd></div>
+                      <div><dt>Phone</dt><dd>{meta.phone ? formatPhone(meta.phone) : "Not matched"}</dd></div>
+                      <div><dt>Call time</dt><dd>{fmtSeconds(result.duration_seconds)}</dd></div>
+                      <div><dt>Grading</dt><dd>{fmtSeconds(result.grading_seconds)}</dd></div>
+                    </dl>
+                    <span className="review-cta">Review QA <ChevronRight size={16} /></span>
+                  </button>
+                  <div className="completed-card-actions">
+                    {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
+                    <button className="text-danger" onClick={() => removeResult(job.job_id, result.result_id)}><Trash2 size={15} /> Remove</button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
-          <div className="source-files">
-            {(job.source_files ?? []).map((file) => <small key={file}>{file}</small>)}
-          </div>
-          {job.results.map((result) => (
-            <button key={result.result_id} className={selectedResultId === result.result_id ? "result active" : "result"} onClick={() => select(result.result_id)}>
-              {titleFor(result, mirrorLeads)}
-            </button>
-          ))}
-          {job.error_report && <textarea readOnly value={job.error_report} />}
-        </article>
-      ))}
+        )}
+      </section>
+
+      {failed.length > 0 && (
+        <section className="panel queue-section" aria-labelledby="failed-heading">
+          <div className="section-heading compact"><div className="section-icon failed"><X size={19} /></div><div><h3 id="failed-heading">Failed</h3><p>{failed.length} job{failed.length === 1 ? "" : "s"} need attention</p></div></div>
+          <div className="processing-list">{failed.map((job) => <article key={job.job_id} className="job-card failed-card"><div className="job-head"><strong>{job.message}</strong><button onClick={() => removeJob(job.job_id)}><Trash2 size={15} /> Remove</button></div>{job.error_report && <textarea className="error-report" readOnly value={job.error_report} />}</article>)}</div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1573,8 +1784,8 @@ function JobList({ jobs, selectedResultId, select, removeJob, mirrorLeads }: { j
 function ReviewPanel({
   item,
   allResults,
-  selectedResultId,
   select,
+  headingRef,
   jobs,
   persistJobs,
   setError,
@@ -1582,9 +1793,8 @@ function ReviewPanel({
 }: {
   item?: { job: Job; result: JobResult };
   allResults: { job: Job; result: JobResult }[];
-  selectedResultId: string;
   select: (id: string) => void;
-  refresh: () => Promise<void>;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
   jobs: Job[];
   persistJobs: (jobs: Job[]) => void;
   setError: (message: string) => void;
@@ -1595,13 +1805,17 @@ function ReviewPanel({
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState(0);
+  const [mobileTab, setMobileTab] = useState<"checks" | "transcript">("checks");
+  const [savedAt, setSavedAt] = useState("");
 
   useEffect(() => {
     setRows(item?.result.qa_overrides ?? []);
     setFinalGrade(item?.result.metrics?.final_grade ?? "Approved");
-    setNote("");
+    setNote(item?.result.analysis?.notes ?? "");
     setSearch("");
     setActive(0);
+    setMobileTab("checks");
+    setSavedAt("");
   }, [item?.result.result_id]);
 
   const matches = useMemo(() => {
@@ -1617,6 +1831,20 @@ function ReviewPanel({
     return positions;
   }, [item, search]);
 
+  const dirty = Boolean(item) && (
+    JSON.stringify(rows) !== JSON.stringify(item?.result.qa_overrides ?? [])
+    || finalGrade !== (item?.result.metrics?.final_grade ?? "Approved")
+    || note !== (item?.result.analysis?.notes ?? "")
+  );
+
+  function reset() {
+    if (!item) return;
+    setRows(item.result.qa_overrides ?? []);
+    setFinalGrade(item.result.metrics?.final_grade ?? "Approved");
+    setNote(item.result.analysis?.notes ?? "");
+    setSavedAt("");
+  }
+
   function save() {
     if (!item) return;
     try {
@@ -1630,6 +1858,7 @@ function ReviewPanel({
         };
       });
       persistJobs(updatedJobs);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
@@ -1638,80 +1867,86 @@ function ReviewPanel({
   if (!item) return <section className="panel"><h3>QA review</h3><p>No completed calls yet.</p></section>;
   const result = item.result;
   const meta = callMeta(result, mirrorLeads);
+  const selectedIndex = Math.max(0, allResults.findIndex(({ result: candidate }) => candidate.result_id === result.result_id));
+  const previous = allResults[selectedIndex - 1]?.result;
+  const next = allResults[selectedIndex + 1]?.result;
   return (
-    <section className="panel">
-      <div className="panel-title">
-        <div>
-          <h3>{titleFor(result, mirrorLeads)}</h3>
-          <p>{result.analysis.source} | Score {result.metrics?.qa_score ?? 0}% | {result.metrics?.outcome}</p>
-          <p className="hint">
-            Agent: {meta.agent || "not detected"} | Customer: {meta.customer || "not matched"} | Phone: {meta.phone ? formatPhone(meta.phone) : "not matched"}
-            {meta.clover && <> | <a href={meta.clover} target="_blank" rel="noreferrer">Open Clover matched lead</a></>}
-          </p>
+    <section className="review-workstation">
+      <aside className="review-rail" aria-label="Completed calls">
+        <div className="review-rail-head">
+          <div><strong>Review queue</strong><span>{selectedIndex + 1} of {allResults.length}</span></div>
+          <div className="rail-nav"><button className="icon-button" aria-label="Previous call" disabled={!previous} onClick={() => previous && select(previous.result_id)}><ChevronLeft size={17} /></button><button className="icon-button" aria-label="Next call" disabled={!next} onClick={() => next && select(next.result_id)}><ChevronRight size={17} /></button></div>
         </div>
-        <button className="primary" onClick={save}>Save QA overrides</button>
-      </div>
-      {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
-      <div className="review-call-picker">
-        <div>
-          <h4>Review queue</h4>
-          <p>{allResults.length} completed call(s). Select any call to review or update overrides.</p>
-        </div>
-        <select value={selectedResultId || result.result_id} onChange={(event) => select(event.target.value)}>
-          {allResults.map(({ result }) => (
-            <option key={result.result_id} value={result.result_id}>
-              {titleFor(result, mirrorLeads)}{callMeta(result, mirrorLeads).clover ? " | Clover matched" : ""}
-            </option>
-          ))}
-        </select>
         <div className="review-call-list">
-          {allResults.map(({ result }) => {
-            const details = callMeta(result, mirrorLeads);
+          {allResults.map(({ result: candidate }) => {
+            const details = callMeta(candidate, mirrorLeads);
             return (
-              <article key={result.result_id} className={result.result_id === item.result.result_id ? "active" : ""}>
-                <button onClick={() => select(result.result_id)}>
-                  <strong>{result.file_name}</strong>
-                  <span>{result.analysis.client || "Unknown"} | {result.analysis.scorecard_name || "No scorecard"} | {result.metrics?.qa_score ?? 0}%</span>
-                  <span>Agent: {details.agent || "not detected"} | Customer: {details.customer || "not matched"} | Phone: {details.phone ? formatPhone(details.phone) : "not matched"}</span>
-                </button>
-                {details.clover && <a href={details.clover} target="_blank" rel="noreferrer">Open Clover</a>}
-              </article>
+              <button key={candidate.result_id} data-testid={`review-call-${candidate.result_id}`} className={candidate.result_id === result.result_id ? "active" : ""} onClick={() => select(candidate.result_id)}>
+                <div><strong>{candidate.file_name}</strong><span className="rail-score">{candidate.metrics?.qa_score ?? 0}%</span></div>
+                <span>{candidate.analysis.client || "Unknown"} · {candidate.analysis.scorecard_name || "No scorecard"}</span>
+                <small>{candidate.metrics?.outcome || "Needs review"}{details.clover ? " · Clover matched" : ""}</small>
+              </button>
             );
           })}
         </div>
-      </div>
-      <div className="review-grid">
-        <div className="qa-table-wrap">
-          <table>
-            <thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Time</th><th>Evidence</th><th>Reviewer note</th></tr></thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={`${row.Qualifier}-${index}`}>
-                  <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
-                  <td><span className="pill">{row["System status"]}</span></td>
-                  <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{["Pass", "Fail", "Needs review", "Not applicable"].map((status) => <option key={status}>{status}</option>)}</select></td>
-                  <td><input value={row.Time} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Time: event.target.value } : r))} /></td>
-                  <td><textarea value={row.Evidence} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Evidence: event.target.value } : r))} /></td>
-                  <td><textarea value={row["Reviewer note"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Reviewer note": event.target.value } : r))} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <aside className="transcript-panel">
-          <div className="searchbar">
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transcript" />
-            <button disabled={!matches.length} onClick={() => setActive((active + matches.length - 1) % matches.length)}>Previous</button>
-            <button disabled={!matches.length} onClick={() => setActive((active + 1) % matches.length)}>Next</button>
-            <span>{matches.length ? `${active + 1}/${matches.length}` : "0 matches"}</span>
+      </aside>
+
+      <div className="review-main">
+        <div className="review-toolbar">
+          <div className="review-identity">
+            <span className="eyebrow">Selected call</span>
+            <h3 ref={headingRef} tabIndex={-1} data-testid="review-heading">{result.file_name}</h3>
+            <p>{result.analysis.client || "Unknown client"} · {result.analysis.scorecard_name || "No scorecard"} · {result.analysis.source}</p>
           </div>
-          {freeAlerts(result.transcript_text).map((alert) => <div className="free-alert" key={alert}>{alert}</div>)}
-          <pre>{highlight(result.transcript_text, search, active)}</pre>
-        </aside>
-      </div>
-      <div className="review-footer">
-        <label>Final grade<select value={finalGrade} onChange={(event) => setFinalGrade(event.target.value)}>{["Approved", "Needs coaching", "Reject / no credit", "Needs second review"].map((grade) => <option key={grade}>{grade}</option>)}</select></label>
-        <label>Reviewer note<textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>
+          <div className="review-toolbar-actions">
+            <span className={`save-state ${dirty ? "dirty" : ""}`}>{dirty ? "Unsaved changes" : savedAt ? `Saved ${savedAt}` : "All changes saved"}</span>
+            <label className="grade-control">Final grade<select value={finalGrade} onChange={(event) => setFinalGrade(event.target.value)}>{["Approved", "Needs coaching", "Reject / no credit", "Needs second review"].map((grade) => <option key={grade}>{grade}</option>)}</select></label>
+            <button onClick={reset} disabled={!dirty}>Reset</button>
+            <button className="primary" data-testid="save-qa-overrides" onClick={save} disabled={!dirty}>Save overrides</button>
+          </div>
+        </div>
+
+        <div className="review-summary">
+          <div><span>QA score</span><strong>{result.metrics?.qa_score ?? 0}%</strong></div>
+          <div><span>Outcome</span><strong>{result.metrics?.outcome || "Needs review"}</strong></div>
+          <div><span>Agent</span><strong>{meta.agent || "Not detected"}</strong></div>
+          <div><span>Customer</span><strong>{meta.customer || "Not matched"}</strong></div>
+          <div><span>Phone</span><strong>{meta.phone ? formatPhone(meta.phone) : "Not matched"}</strong></div>
+          {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
+        </div>
+
+        {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
+        <div className="mobile-review-tabs" role="tablist" aria-label="Review content">
+          <button role="tab" data-testid="review-tab-checks" aria-selected={mobileTab === "checks"} className={mobileTab === "checks" ? "active" : ""} onClick={() => setMobileTab("checks")}>QA checks</button>
+          <button role="tab" data-testid="review-tab-transcript" aria-selected={mobileTab === "transcript"} className={mobileTab === "transcript" ? "active" : ""} onClick={() => setMobileTab("transcript")}>Transcript</button>
+        </div>
+        <div className="review-grid">
+          <div className={`qa-pane ${mobileTab === "checks" ? "mobile-active" : ""}`}>
+            <div className="pane-heading"><div><h4>QA checks</h4><p>{rows.length} qualifier{rows.length === 1 ? "" : "s"}</p></div></div>
+            <div className="qa-table-wrap">
+              <table>
+                <thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Time</th><th>Evidence</th><th>Reviewer note</th></tr></thead>
+                <tbody>{rows.map((row, index) => (
+                  <tr key={`${row.Qualifier}-${index}`}>
+                    <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
+                    <td><span className="pill">{row["System status"]}</span></td>
+                    <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{["Pass", "Fail", "Needs review", "Not applicable"].map((status) => <option key={status}>{status}</option>)}</select></td>
+                    <td><input value={row.Time} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Time: event.target.value } : r))} /></td>
+                    <td><textarea value={row.Evidence} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Evidence: event.target.value } : r))} /></td>
+                    <td><textarea value={row["Reviewer note"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Reviewer note": event.target.value } : r))} /></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+          <section className={`transcript-panel ${mobileTab === "transcript" ? "mobile-active" : ""}`}>
+            <div className="pane-heading transcript-heading"><div><h4>Transcript</h4><p>{fmtSeconds(result.duration_seconds)} call time</p></div></div>
+            <div className="searchbar"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transcript" /><button disabled={!matches.length} onClick={() => setActive((active + matches.length - 1) % matches.length)}>Previous</button><button disabled={!matches.length} onClick={() => setActive((active + 1) % matches.length)}>Next</button><span>{matches.length ? `${active + 1}/${matches.length}` : "0 matches"}</span></div>
+            {freeAlerts(result.transcript_text).map((alert) => <div className="free-alert" key={alert}>{alert}</div>)}
+            <pre>{highlight(result.transcript_text, search, active)}</pre>
+          </section>
+        </div>
+        <div className="review-footer"><label>Overall reviewer note<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Coaching notes, override reasoning, or follow-up needed..." /></label></div>
       </div>
     </section>
   );
