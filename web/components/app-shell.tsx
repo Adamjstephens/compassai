@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.7";
+const APP_VERSION = "0.5.8";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -931,9 +931,15 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
   };
 }
 
-function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duration = 0) {
+export function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duration = 0) {
   const { entry, client } = pickScorecard(transcript, library);
-  const rows = rulesFor(entry, client).map((rule) => gradeRule(rule, transcript, duration));
+  const rows = rulesFor(entry, client).map((rule) => {
+    const row = gradeRule(rule, transcript, duration);
+    if (isCriticalCategory(row.category) && row.status === "Pass") {
+      return { ...row, status: "Needs review", passed: false };
+    }
+    return row;
+  });
   return { entry, client, rows };
 }
 

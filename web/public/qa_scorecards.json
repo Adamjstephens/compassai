@@ -16,6 +16,7 @@
             "patterns": [
               "\\bQWD\\b",
               "\\bRbA\\b",
+              "\\bRenewal\\s+by\\s+andersen\\b",
               "\\bRenewal\\s+by\\s+anderson\\b"
             ]
           }
