@@ -21,6 +21,7 @@ type ScorecardEntry = {
   };
 };
 type ScorecardLibrary = { active_scorecard_id?: string; scorecards: ScorecardEntry[]; required_clients_available?: boolean };
+type MirrorLead = { id: string; clover_url: string; label: string; disposition?: string; customer?: string; phone?: string };
 type EditorRow = {
   Category: string;
   Qualifier: string;
@@ -64,9 +65,10 @@ type Job = {
 
 const OPENAI_KEY_STORAGE = "compassai.openaiApiKey";
 const JOB_STORAGE = "compassai.vercelOnly.jobs";
+const SCORECARD_STORAGE = "compassai.scorecards";
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const QA_MODEL = "gpt-4o-mini";
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.2.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -128,12 +130,86 @@ function snippetFor(text: string, match: string) {
   return text.slice(Math.max(0, index - 70), Math.min(text.length, index + match.length + 90)).replace(/\s+/g, " ").trim();
 }
 
+function normalizeKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function scorecardSummary(entry: ScorecardEntry) {
+  const bundle = entry.bundle ?? {};
+  const clientSets = Object.keys(bundle.client_rule_sets ?? {}).length;
+  const universal = bundle.universal_rules?.length ?? 0;
+  const critical = bundle.critical_checks?.length ?? 0;
+  const aliases = (bundle.client_patterns ?? []).reduce((sum, group) => sum + (group.patterns?.length ?? 0), 0);
+  return entry.summary || `${clientSets} client set(s), ${universal} universal rule(s), ${critical} critical check(s), ${aliases} aliases`;
+}
+
+function normalizeScorecardLibrary(library: ScorecardLibrary): ScorecardLibrary {
+  const seen = new Set<string>();
+  const scorecards = (library.scorecards ?? [])
+    .filter((entry) => entry && entry.bundle)
+    .map((entry) => {
+      const base = entry.id || entry.name || entry.bundle?.name || "scorecard";
+      let id = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || uuid();
+      while (seen.has(id)) id = `${id}-${seen.size + 1}`;
+      seen.add(id);
+      return { ...entry, id, name: entry.name || entry.bundle?.name || "Unnamed scorecard" };
+    });
+  const active = scorecards.some((entry) => entry.id === library.active_scorecard_id)
+    ? library.active_scorecard_id
+    : scorecards[0]?.id;
+  const names = new Set(scorecards.map((entry) => entry.name));
+  return {
+    active_scorecard_id: active,
+    scorecards,
+    required_clients_available: [...REQUIRED_SCORECARDS].every((name) => names.has(name)),
+  };
+}
+
+function activeScorecard(library: ScorecardLibrary) {
+  return library.scorecards.find((entry) => entry.id === library.active_scorecard_id) ?? library.scorecards[0];
+}
+
 function timeForSnippet(text: string, snippet: string, duration = 0) {
   if (!duration || !snippet) return "00:00";
   const index = text.toLowerCase().indexOf(snippet.slice(0, 24).toLowerCase());
   const ratio = index >= 0 ? index / Math.max(text.length, 1) : 0;
   const seconds = Math.max(0, Math.round(duration * ratio));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function evidenceFromTranscript(transcript: string, proposed: string, fallback: AnalysisRow | undefined, duration = 0) {
+  const clean = proposed.replace(/\s+/g, " ").trim();
+  const exact = clean && transcript.toLowerCase().includes(clean.toLowerCase()) ? snippetFor(transcript, clean) : "";
+  if (exact) {
+    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration) };
+  }
+  if (fallback?.result && !/^No clear evidence/i.test(fallback.result)) {
+    return { result: fallback.result, evidence_time: fallback.evidence_time };
+  }
+  const quoted = /["“]([^"”]{8,120})["”]/.exec(proposed)?.[1] ?? "";
+  const quoteSnippet = quoted ? snippetFor(transcript, quoted) : "";
+  if (quoteSnippet) {
+    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration) };
+  }
+  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "" };
+}
+
+function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
+  const fallbackByCheck = new Map(ruleRows.map((row) => [normalizeKey(row.check), row]));
+  const normalized = rows.map((row) => {
+    const fallback = fallbackByCheck.get(normalizeKey(row.check));
+    const evidence = evidenceFromTranscript(transcript, row.result || "", fallback, duration);
+    const modelTime = String(row.evidence_time || "");
+    return {
+      category: row.category || fallback?.category || "Qualifier",
+      check: row.check || fallback?.check || "QA check",
+      status: row.status || fallback?.status || "Needs review",
+      passed: (row.status || fallback?.status) === "Pass",
+      result: evidence.result,
+      evidence_time: /^\d{1,2}:\d{2}(?::\d{2})?$/.test(modelTime) && modelTime !== "00:00" ? modelTime : evidence.evidence_time,
+    };
+  });
+  return normalized.length ? normalized : ruleRows;
 }
 
 function readAscii(bytes: Uint8Array, offset: number, length: number) {
@@ -204,7 +280,7 @@ async function splitWavForVercelRelay(file: File) {
 }
 
 function pickScorecard(transcript: string, library: ScorecardLibrary) {
-  let best = library.scorecards[0];
+  let best = activeScorecard(library) ?? library.scorecards[0];
   let client = "Unknown";
   for (const entry of library.scorecards) {
     for (const patternGroup of entry.bundle?.client_patterns ?? []) {
@@ -389,13 +465,37 @@ function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duratio
   return { entry, client, rows };
 }
 
-function parseMirrorText(value: string) {
+function parseMirrorText(value: string): MirrorLead[] {
   const links = [...value.matchAll(/https?:\/\/[^\s"'<>]+/gi)].map((match) => match[0]);
   const clover = links.filter((link) => /clover|lead|customer|contact/i.test(link));
+  const parser = typeof DOMParser !== "undefined" ? new DOMParser() : null;
+  const rows: MirrorLead[] = [];
+  if (parser && /<[^>]+>/.test(value)) {
+    const doc = parser.parseFromString(value, "text/html");
+    doc.querySelectorAll("tr, .lead, .appointment, .customer, article, section").forEach((node, index) => {
+      const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      const href = Array.from(node.querySelectorAll("a"))
+        .map((link) => link.getAttribute("href") || "")
+        .find((url) => /clover|lead|customer|contact/i.test(url));
+      if (!href && text.length < 20) return;
+      const phone = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.exec(text)?.[0] ?? "";
+      const disposition = /(booked|appointment|rejected|not interested|no answer|cancelled|rescheduled)/i.exec(text)?.[0] ?? "";
+      if (href || phone || disposition) {
+        rows.push({
+          id: `${index}-${href || phone || text.slice(0, 20)}`,
+          clover_url: href || "",
+          label: text.slice(0, 120) || `MirrorCXT lead ${index + 1}`,
+          disposition,
+          phone,
+        });
+      }
+    });
+  }
+  if (rows.length) return rows;
   return clover.map((url, index) => ({ id: `${index}-${url}`, clover_url: url, label: `MirrorCXT lead ${index + 1}` }));
 }
 
-function makeReport(results: JobResult[], mirrorLeads: any[]) {
+function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
   const generated = new Date().toLocaleString();
   const rows = results
     .map((result) => {
@@ -419,7 +519,7 @@ body{font-family:Arial,sans-serif;margin:24px;color:#17202a;line-height:1.45}h1,
 <h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Total call time: ${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}.</p>
 <h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>QA Score</th><th>Outcome</th><th>Call Time</th></tr></thead><tbody>${rows}</tbody></table></div>
 <h2>QA Evidence</h2><div class="table-wrap"><table><thead><tr><th>Qualifier</th><th>Status</th><th>Time</th><th>Evidence</th><th>Reviewer Note</th></tr></thead><tbody>${evidence}</tbody></table></div>
-<h2>MirrorCXT Links</h2><ul>${mirrorLeads.map((lead) => `<li><a href="${escapeHtml(lead.clover_url)}">${escapeHtml(lead.clover_url)}</a></li>`).join("")}</ul>
+<h2>MirrorCXT Links</h2><ul>${mirrorLeads.map((lead) => `<li>${lead.clover_url ? `<a href="${escapeHtml(lead.clover_url)}">${escapeHtml(lead.clover_url)}</a>` : ""} ${escapeHtml(lead.label)}</li>`).join("")}</ul>
 ${transcriptSections}<script>document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var t=document.getElementById(input.dataset.target);var raw=t.textContent;var escaped=input.value.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&');t.innerHTML=escaped?raw.replace(new RegExp(escaped,'gi'),function(m){return '<mark>'+m+'</mark>'}):raw})});</script></body></html>`;
 }
 
@@ -432,11 +532,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [error, setError] = useState("");
   const [files, setFiles] = useState<FileList | null>(null);
   const [mirrorText, setMirrorText] = useState("");
-  const [mirrorLeads, setMirrorLeads] = useState<any[]>([]);
+  const [mirrorLeads, setMirrorLeads] = useState<MirrorLead[]>([]);
   const [reportHtml, setReportHtml] = useState("");
   const [busy, setBusy] = useState(false);
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [scorecardEditor, setScorecardEditor] = useState("");
+  const [editingScorecardId, setEditingScorecardId] = useState("");
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
   const selected = results.find((item) => item.result.result_id === selectedResultId) ?? results[0];
@@ -444,6 +546,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const persistJobs = useCallback((next: Job[]) => {
     setJobs(next);
     window.localStorage.setItem(JOB_STORAGE, JSON.stringify(next));
+  }, []);
+
+  const persistScorecards = useCallback((next: ScorecardLibrary) => {
+    const normalized = normalizeScorecardLibrary(next);
+    setScorecards(normalized);
+    window.localStorage.setItem(SCORECARD_STORAGE, JSON.stringify(normalized));
+    setStatus(`Scorecard library saved: ${normalized.scorecards.length} scorecard(s).`);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -460,11 +569,18 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     fetch("/qa_scorecards.json")
       .then((response) => response.json())
       .then((library: ScorecardLibrary) => {
-        const names = new Set((library.scorecards ?? []).map((entry) => entry.name));
-        setScorecards({ ...library, required_clients_available: [...REQUIRED_SCORECARDS].every((name) => names.has(name)) });
+        const stored = window.localStorage.getItem(SCORECARD_STORAGE);
+        setScorecards(normalizeScorecardLibrary(stored ? JSON.parse(stored) : library));
       })
       .catch((caught) => setError(`Scorecards failed to load: ${caught instanceof Error ? caught.message : String(caught)}`));
   }, [refresh]);
+
+  useEffect(() => {
+    if (!scorecards?.scorecards.length) return;
+    const selected = scorecards.scorecards.find((entry) => entry.id === editingScorecardId) ?? activeScorecard(scorecards);
+    setEditingScorecardId(selected?.id ?? "");
+    setScorecardEditor(JSON.stringify(selected?.bundle ?? {}, null, 2));
+  }, [scorecards?.active_scorecard_id]);
 
   async function upload() {
     if (!files?.length || !scorecards) return;
@@ -509,14 +625,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           update({ message: `Running cloud QA for ${file.name}...`, progress: (index + 0.65) / files.length, percent: Math.round(((index + 0.65) / files.length) * 100) });
           const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, openaiApiKey.trim());
           if (Array.isArray(qa.rows) && qa.rows.length) {
-            rows = qa.rows.map((row) => ({
-              category: row.category || "Qualifier",
-              check: row.check,
-              status: row.status,
-              passed: row.status === "Pass",
-              result: row.result,
-              evidence_time: row.evidence_time || "00:00",
-            }));
+            rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
             source = transcriptPayload.chunked
               ? `OpenAI transcription (${transcriptPayload.chunk_count} audio parts) + OpenAI QA via Vercel relay`
               : "OpenAI transcription + OpenAI QA via Vercel relay";
@@ -571,10 +680,82 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     persistJobs(jobs.filter((job) => job.job_id !== jobId));
   }
 
-  function parseMirror() {
-    const leads = parseMirrorText(mirrorText);
+  function parseMirror(value = mirrorText) {
+    const leads = parseMirrorText(value);
     setMirrorLeads(leads);
     setStatus(`Imported ${leads.length} MirrorCXT lead(s).`);
+  }
+
+  async function importMirrorFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setMirrorText(text);
+    parseMirror(text);
+  }
+
+  async function importScorecardFile(file: File | null) {
+    if (!file || !scorecards) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const incoming: ScorecardEntry[] = Array.isArray(parsed.scorecards)
+        ? parsed.scorecards
+        : [{ id: parsed.id || parsed.name || file.name, name: parsed.name || parsed.bundle?.name || file.name, bundle: parsed.bundle ?? parsed }];
+      persistScorecards({
+        active_scorecard_id: incoming[0]?.id ?? scorecards.active_scorecard_id,
+        scorecards: [...scorecards.scorecards, ...incoming],
+      });
+    } catch (caught) {
+      setError(`Could not import scorecard JSON: ${caught instanceof Error ? caught.message : String(caught)}`);
+    }
+  }
+
+  function activateScorecard(scorecardId: string) {
+    if (!scorecards) return;
+    persistScorecards({ ...scorecards, active_scorecard_id: scorecardId });
+  }
+
+  function editScorecard(scorecardId: string) {
+    const entry = scorecards?.scorecards.find((item) => item.id === scorecardId);
+    if (!entry) return;
+    setEditingScorecardId(entry.id);
+    setScorecardEditor(JSON.stringify(entry.bundle, null, 2));
+  }
+
+  function saveScorecardEdit(mode: "update" | "add") {
+    if (!scorecards) return;
+    try {
+      const bundle = JSON.parse(scorecardEditor);
+      const entry: ScorecardEntry = {
+        id: mode === "update" && editingScorecardId ? editingScorecardId : `${bundle.name || "scorecard"}-${Date.now()}`,
+        name: bundle.name || "Unnamed scorecard",
+        bundle,
+      };
+      const next = mode === "update"
+        ? scorecards.scorecards.map((item) => (item.id === editingScorecardId ? entry : item))
+        : [...scorecards.scorecards, entry];
+      persistScorecards({ active_scorecard_id: entry.id, scorecards: next });
+      setEditingScorecardId(entry.id);
+    } catch (caught) {
+      setError(`Could not save scorecard JSON: ${caught instanceof Error ? caught.message : String(caught)}`);
+    }
+  }
+
+  function deleteScorecard(scorecardId: string) {
+    if (!scorecards || scorecards.scorecards.length <= 1) return;
+    const next = scorecards.scorecards.filter((entry) => entry.id !== scorecardId);
+    persistScorecards({ active_scorecard_id: next[0]?.id, scorecards: next });
+  }
+
+  function resetBundledScorecards() {
+    fetch("/qa_scorecards.json")
+      .then((response) => response.json())
+      .then((library: ScorecardLibrary) => {
+        window.localStorage.removeItem(SCORECARD_STORAGE);
+        setScorecards(normalizeScorecardLibrary(library));
+        setStatus("Restored bundled scorecards.");
+      })
+      .catch((caught) => setError(`Could not restore bundled scorecards: ${caught instanceof Error ? caught.message : String(caught)}`));
   }
 
   function exportReport() {
@@ -657,27 +838,89 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <JobList jobs={jobs} selectedResultId={selectedResultId} select={setSelectedResultId} removeJob={removeJob} />
           </section>
         )}
-        {view === "review" && <ReviewPanel item={selected} refresh={refresh} persistJobs={persistJobs} jobs={jobs} setError={setError} />}
+        {view === "review" && (
+          <ReviewPanel
+            item={selected}
+            allResults={results}
+            selectedResultId={selectedResultId}
+            select={setSelectedResultId}
+            refresh={refresh}
+            persistJobs={persistJobs}
+            jobs={jobs}
+            setError={setError}
+          />
+        )}
         {view === "scorecards" && (
           <section className="panel">
-            <h3>Scorecards</h3>
-            <div className="scorecard-grid">
-              {scorecards?.scorecards.map((entry) => (
-                <article key={entry.id}>
-                  <strong>{entry.name}</strong>
-                  <p>{entry.summary || `${entry.bundle?.universal_rules?.length ?? 0} universal rules, ${Object.keys(entry.bundle?.client_rule_sets ?? {}).length} client rule set(s).`}</p>
-                  {entry.id === scorecards.active_scorecard_id && <span className="pill">Default</span>}
-                </article>
-              ))}
+            <div className="panel-title">
+              <div>
+                <h3>Scorecards</h3>
+                <p>Manage the same JSON scorecard bundles CompassQA uses. Changes are saved in this browser.</p>
+              </div>
+              <button onClick={resetBundledScorecards} disabled={busy}>Restore bundled</button>
+            </div>
+            <div className="scorecard-tools">
+              <label>Active scorecard
+                <select value={scorecards?.active_scorecard_id ?? ""} onChange={(event) => activateScorecard(event.target.value)}>
+                  {scorecards?.scorecards.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                </select>
+              </label>
+              <label>Import scorecard JSON/library
+                <input type="file" accept=".json,application/json" onChange={(event) => importScorecardFile(event.target.files?.[0] ?? null)} />
+              </label>
+              {scorecards && (
+                <a className="download-link" download="compassai_scorecards.json" href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(scorecards, null, 2))}`}>
+                  Download scorecards JSON
+                </a>
+              )}
+            </div>
+            <div className="scorecard-layout">
+              <div className="scorecard-list">
+                {scorecards?.scorecards.map((entry) => (
+                  <article key={entry.id} className={entry.id === editingScorecardId ? "selected" : ""}>
+                    <div>
+                      <strong>{entry.name}</strong>
+                      <p>{scorecardSummary(entry)}</p>
+                      {entry.id === scorecards.active_scorecard_id && <span className="pill">Active</span>}
+                    </div>
+                    <div className="button-row">
+                      <button onClick={() => activateScorecard(entry.id)}>Use</button>
+                      <button onClick={() => editScorecard(entry.id)}>Edit</button>
+                      <button onClick={() => deleteScorecard(entry.id)} disabled={scorecards.scorecards.length <= 1}>Delete</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="scorecard-editor">
+                <h4>{editingScorecardId ? "Edit scorecard JSON" : "Add scorecard JSON"}</h4>
+                <textarea value={scorecardEditor} onChange={(event) => setScorecardEditor(event.target.value)} spellCheck={false} />
+                <div className="button-row">
+                  <button className="primary" onClick={() => saveScorecardEdit("update")} disabled={!editingScorecardId}>Save selected</button>
+                  <button onClick={() => saveScorecardEdit("add")}>Save as new</button>
+                </div>
+              </div>
             </div>
           </section>
         )}
         {view === "mirrorcxt" && (
           <section className="panel">
             <h3>MirrorCXT import</h3>
+            <label>Upload MirrorCXT HTML export
+              <input type="file" accept=".html,.htm,.txt,text/html,text/plain" onChange={(event) => importMirrorFile(event.target.files?.[0] ?? null)} />
+            </label>
             <textarea value={mirrorText} onChange={(event) => setMirrorText(event.target.value)} placeholder="Paste MirrorCXT HTML export here..." />
-            <button className="primary" onClick={parseMirror} disabled={busy || !mirrorText.trim()}>Import MirrorCXT</button>
-            <p>{mirrorLeads.length} Clover/MirrorCXT link(s) loaded for reports.</p>
+            <button className="primary" onClick={() => parseMirror()} disabled={busy || !mirrorText.trim()}>Import MirrorCXT</button>
+            <p>{mirrorLeads.length} Clover/MirrorCXT lead(s) loaded for reports.</p>
+            <div className="mirror-list">
+              {mirrorLeads.map((lead) => (
+                <article key={lead.id}>
+                  <strong>{lead.disposition || "MirrorCXT lead"}</strong>
+                  <p>{lead.label}</p>
+                  {lead.phone && <small>{lead.phone}</small>}
+                  {lead.clover_url && <a href={lead.clover_url} target="_blank" rel="noreferrer">Open Clover</a>}
+                </article>
+              ))}
+            </div>
           </section>
         )}
         {view === "settings" && (
@@ -739,11 +982,17 @@ function JobList({ jobs, selectedResultId, select, removeJob }: { jobs: Job[]; s
 
 function ReviewPanel({
   item,
+  allResults,
+  selectedResultId,
+  select,
   jobs,
   persistJobs,
   setError,
 }: {
   item?: { job: Job; result: JobResult };
+  allResults: { job: Job; result: JobResult }[];
+  selectedResultId: string;
+  select: (id: string) => void;
   refresh: () => Promise<void>;
   jobs: Job[];
   persistJobs: (jobs: Job[]) => void;
@@ -806,6 +1055,27 @@ function ReviewPanel({
         <button className="primary" onClick={save}>Save QA overrides</button>
       </div>
       {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
+      <div className="review-call-picker">
+        <div>
+          <h4>Review queue</h4>
+          <p>{allResults.length} completed call(s). Select any call to review or update overrides.</p>
+        </div>
+        <select value={selectedResultId || result.result_id} onChange={(event) => select(event.target.value)}>
+          {allResults.map(({ result }) => (
+            <option key={result.result_id} value={result.result_id}>
+              {titleFor(result)}
+            </option>
+          ))}
+        </select>
+        <div className="review-call-list">
+          {allResults.map(({ result }) => (
+            <button key={result.result_id} className={result.result_id === item.result.result_id ? "active" : ""} onClick={() => select(result.result_id)}>
+              <strong>{result.file_name}</strong>
+              <span>{result.analysis.client || "Unknown"} | {result.analysis.scorecard_name || "No scorecard"} | {result.metrics?.qa_score ?? 0}%</span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="review-grid">
         <div className="qa-table-wrap">
           <table>

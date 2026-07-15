@@ -148,6 +148,45 @@ small { color: var(--muted); overflow-wrap: break-word; }
 .api-key-box label { display: grid; gap: 7px; font-weight: 700; }
 .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .hint { color: var(--muted); line-height: 1.45; margin: 6px 0; }
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 12px;
+  color: var(--brand-dark);
+  text-decoration: none;
+  font-weight: 800;
+  background: var(--panel);
+}
+.scorecard-tools {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+.scorecard-tools label, .scorecard-editor label { display: grid; gap: 6px; font-weight: 800; }
+.scorecard-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.2fr);
+  gap: 14px;
+  align-items: start;
+}
+.scorecard-list { display: grid; gap: 10px; max-height: 620px; overflow: auto; }
+.scorecard-list article, .mirror-list article, .review-call-picker {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+.scorecard-list article.selected { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15, 118, 110, .14); }
+.scorecard-list article { display: grid; gap: 10px; }
+.scorecard-list p, .mirror-list p, .review-call-picker p { color: var(--muted); margin: 4px 0; line-height: 1.4; }
+.scorecard-editor textarea { min-height: 520px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9rem; }
+.mirror-list { display: grid; gap: 10px; margin-top: 12px; }
+.mirror-list a { color: var(--brand-dark); font-weight: 800; }
 .pill {
   display: inline-flex;
   border-radius: 999px;
@@ -163,6 +202,20 @@ small { color: var(--muted); overflow-wrap: break-word; }
   gap: 16px;
   align-items: start;
 }
+.review-call-picker { margin: 12px 0 14px; display: grid; gap: 10px; }
+.review-call-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+.review-call-list button {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  align-content: start;
+}
+.review-call-list button.active { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(15, 118, 110, .16); }
+.review-call-list span { color: var(--muted); font-size: .86rem; }
 .qa-table-wrap {
   overflow-x: auto;
   max-width: 100%;
@@ -246,7 +299,7 @@ iframe {
   z-index: 10;
 }
 @media (max-width: 1180px) {
-  .app-shell, .review-grid, .review-footer { grid-template-columns: 1fr; }
+  .app-shell, .review-grid, .review-footer, .scorecard-tools, .scorecard-layout { grid-template-columns: 1fr; }
   aside { position: static; }
   .drop, .searchbar { grid-template-columns: 1fr; }
 }
