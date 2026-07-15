@@ -1,0 +1,10 @@
+.data/
+api/__pycache__/
+api/app/__pycache__/
+api/tests/__pycache__/
+web/.next/
+web/node_modules/
+web/.env.local
+web/.env.production
+web/.vercel/
+.secrets/
