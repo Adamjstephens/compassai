@@ -66,6 +66,7 @@ const OPENAI_KEY_STORAGE = "compassai.openaiApiKey";
 const JOB_STORAGE = "compassai.vercelOnly.jobs";
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const QA_MODEL = "gpt-4o-mini";
+const APP_VERSION = "0.1.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -610,6 +611,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           <img src="/logo512.png" alt="" />
           <div>
             <h1>CompassAi</h1>
+            <span className="version-label">Version {APP_VERSION}</span>
             <p>{userEmail}</p>
           </div>
         </div>

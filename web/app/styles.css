@@ -77,6 +77,7 @@ aside {
 .brand img { width: 48px; height: 48px; border-radius: 10px; }
 .brand h1 { margin: 0; }
 .brand p, aside p { color: #a8b3c2; margin: 4px 0 0; }
+.version-label { color: #7dd3fc; display: block; font-size: .78rem; font-weight: 800; letter-spacing: 0; margin-top: 2px; }
 nav { display: grid; gap: 8px; margin-bottom: 16px; }
 nav button { text-align: left; justify-content: flex-start; }
 nav button.active { background: var(--brand); color: white; border-color: var(--brand); }
