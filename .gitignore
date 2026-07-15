@@ -8,3 +8,7 @@ web/.env.local
 web/.env.production
 web/.vercel/
 .secrets/
+
+# Local/generated artifacts
+.DS_Store
+*.tsbuildinfo
