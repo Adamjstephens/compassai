@@ -112,6 +112,8 @@ textarea { min-height: 140px; resize: vertical; }
 .side-card span { color: #a8b3c2; display: block; font-size: .86rem; margin-bottom: 5px; }
 .side-card strong { display: block; }
 .side-card button { margin-top: 10px; width: 100%; }
+.hours-saved-card { border-color: rgba(45, 212, 191, .4); }
+.hours-saved-card strong { color: #ccfbf1; line-height: 1.4; }
 
 main { padding: 22px; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }

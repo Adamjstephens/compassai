@@ -126,6 +126,7 @@ type Job = {
 
 const OPENAI_KEY_STORAGE = "compassai.openaiApiKey";
 const JOB_STORAGE = "compassai.vercelOnly.jobs";
+const HOURS_SAVED_STORAGE = "compassai.hoursSaved";
 const SCORECARD_STORAGE = "compassai.scorecards";
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const DEFAULT_QA_MODEL = "gpt-4o-mini";
@@ -134,7 +135,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.2";
+const APP_VERSION = "0.5.3";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -996,6 +997,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [editingScorecardId, setEditingScorecardId] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hoursSavedSeconds, setHoursSavedSeconds] = useState(0);
   const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
   const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -1096,6 +1098,35 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE, theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let stored: { seconds: number; resultIds: string[] } = { seconds: 0, resultIds: [] };
+    try {
+      const raw = window.localStorage.getItem(HOURS_SAVED_STORAGE);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<typeof stored> | null;
+        if (parsed && typeof parsed === "object") {
+          stored = {
+            seconds: Number(parsed.seconds) || 0,
+            resultIds: Array.isArray(parsed.resultIds) ? parsed.resultIds : [],
+          };
+        }
+      }
+    } catch {
+      // Rebuild a damaged local counter from the completed results still in this browser.
+    }
+    const resultIds = new Set(Array.isArray(stored.resultIds) ? stored.resultIds : []);
+    let seconds = Number.isFinite(stored.seconds) ? Math.max(0, stored.seconds) : 0;
+    jobs.flatMap((job) => job.results).forEach((result) => {
+      if (resultIds.has(result.result_id)) return;
+      resultIds.add(result.result_id);
+      seconds += Math.max(0, Number(result.duration_seconds) || 0);
+    });
+    const next = { seconds, resultIds: Array.from(resultIds) };
+    window.localStorage.setItem(HOURS_SAVED_STORAGE, JSON.stringify(next));
+    setHoursSavedSeconds(seconds);
+  }, [hydrated, jobs]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1513,6 +1544,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           <div className="side-card-title"><ShieldCheck size={16} /><span>Scorecards</span></div>
           <strong>{scorecards?.scorecards.length ?? 0} loaded</strong>
           <p>{scorecards?.required_clients_available ? "Required client library ready." : "Required client check pending."}</p>
+        </section>
+        <section className="side-card hours-saved-card" title="One hour is credited for each hour of completed call audio processed by CompassAi.">
+          <div className="side-card-title"><Clock3 size={16} /><span>Time saved</span></div>
+          <strong>Hours saved, using CompassAi: {(hoursSavedSeconds / 3600).toFixed(1)}</strong>
+          <p>Saved only in this browser.</p>
         </section>
       </aside>
       <main>
