@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.6";
+const APP_VERSION = "0.5.7";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -578,17 +578,17 @@ function evidenceFromTranscript(transcript: string, proposed: string, fallback: 
   const clean = proposed.replace(/\s+/g, " ").trim();
   const exact = clean && transcript.toLowerCase().includes(clean.toLowerCase()) ? snippetFor(transcript, clean) : "";
   if (exact) {
-    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration), verifiedForPass: true };
+    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration), verifiedForPass: true, source: "model" as const };
   }
   if (fallback?.result && !/^No clear evidence/i.test(fallback.result)) {
-    return { result: fallback.result, evidence_time: fallback.evidence_time, verifiedForPass: fallback.status === "Pass" };
+    return { result: fallback.result, evidence_time: fallback.evidence_time, verifiedForPass: fallback.status === "Pass", source: "scanner" as const };
   }
   const quoted = /["“]([^"”]{8,120})["”]/.exec(proposed)?.[1] ?? "";
   const quoteSnippet = quoted ? snippetFor(transcript, quoted) : "";
   if (quoteSnippet) {
-    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration), verifiedForPass: true };
+    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration), verifiedForPass: true, source: "model" as const };
   }
-  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "", verifiedForPass: false };
+  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "", verifiedForPass: false, source: "unverified" as const };
 }
 
 function ruleKey(value = "") {
@@ -621,7 +621,8 @@ export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], tr
     const modelTime = String(row?.evidence_time || "");
     const category = fallback.category || row?.category || "Qualifier";
     let status = canonicalStatus(row?.status || fallback.status);
-    if ((isCriticalCategory(category) && status === "Not applicable") || (status === "Pass" && !evidence.verifiedForPass)) {
+    const critical = isCriticalCategory(category);
+    if ((critical && status === "Not applicable") || (status === "Pass" && (!evidence.verifiedForPass || (critical && evidence.source !== "model")))) {
       status = "Needs review";
     }
     return {

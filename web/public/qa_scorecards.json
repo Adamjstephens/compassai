@@ -56,15 +56,9 @@
             "name": "Homeowner confirmed",
             "type": null,
             "positive_patterns": [
-              "\\bhomeowner\\b",
-              "\\bhome\\s+owner\\b",
-              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
-              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
-              "\\bproperty\\s+owner\\b",
-              "\\bdo\\s+you\\s+own\\b",
-              "\\bare\\s+you\\s+the\\s+owner\\b",
-              "\\bmy\\s+home\\b",
-              "\\bmy\\s+house\\b"
+              "\\b(?:are\\s+you\\s+the\\s+(?:homeowner|home\\s+owner|owner)|do\\s+you\\s+own).{0,100}\\b(?:yes|yeah|yep|correct|right|i\\s+am|we\\s+are|i\\s+do|we\\s+do)\\b",
+              "\\b(?:i\\s+am|we\\s+are|i'm|we're)\\s+(?:the\\s+)?(?:homeowner|home\\s+owner|owner)\\b",
+              "\\b(?:i|we)\\s+own\\s+(?:the|this|my|our)\\s+(?:home|house|property)\\b"
             ],
             "negative_patterns": [
               "\\brent(?:er|ing)?\\b",
@@ -118,8 +112,7 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
                   "\\bAppointment\\s+length\\s+not\\s+specified\\b"
@@ -131,8 +124,9 @@
                 "name": "All decision makers present",
                 "type": null,
                 "positive_patterns": [
-                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
-                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                  "\\b(?:spouse|husband|wife|partner|significant\\s+other|decision\\s+maker).{0,100}\\b(?:will|can|going\\s+to)\\b.{0,40}\\b(?:attend|be\\s+there|present|home)\\b",
+                  "\\b(?:only|sole)\\s+(?:decision\\s+maker|owner|homeowner)\\b",
+                  "\\b(?:anyone|anybody)\\s+else.{0,80}\\b(?:no|just\\s+me|only\\s+me|nobody)\\b"
                 ],
                 "negative_patterns": [
                   "\\bQuestion\\s+about\\s+decision\\s+makers\\s+not\\s+asked\\s+or\\s+other\\s+decision\\s+makers\\s+exist\\s+but\\s+will\\s+not\\s+be\\s+present\\b"
@@ -145,13 +139,7 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
-                  "\\bCustomer\\s+confirms\\s+their\\s+address\\b"
+                  "\\b(?:address|street\\s+address).{0,80}\\b(?:correct|confirmed|right|yes|yeah|yep)\\b"
                 ],
                 "negative_patterns": [
                   "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+address\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
@@ -163,14 +151,8 @@
                 "name": "Number Confirmed",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
                   "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
-                  "\\bPhone\\s+Number\\s+is\\s+confirmed\\b"
+                  "\\b(?:phone|cell|contact)\\s+number.{0,80}\\b(?:correct|confirmed|right|yes|yeah|yep)\\b"
                 ],
                 "negative_patterns": [
                   "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+phone\\s+number\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
@@ -182,9 +164,8 @@
                 "name": "Government Grant Disclosure",
                 "type": null,
                 "positive_patterns": [
-                  "\\bgovernment\\s+(?:assistance|grant|program|aid|fund)\\b",
-                  "\\bfree\\s+windows?\\b",
-                  "\\bdoesn'?t\\s+(?:participate|do|cover|offer)\\s+government\\b"
+                  "\\b(?:government\\s+(?:assistance|grant|program|aid|fund)|free\\s+windows?).{0,240}\\b(?:yes|yeah|yep|okay|ok|understand|correct|right)\\b",
+                  "\\bdoesn'?t\\s+(?:participate|do|cover|offer)\\s+government.{0,200}\\b(?:yes|yeah|yep|okay|ok|understand|correct|right)\\b"
                 ],
                 "negative_patterns": [
                   "\\bcustomer\\s+wants\\s+free\\s+windows\\s+and\\s+does\\s+not\\s+understand\\s+that\\s+we\\s+do\\s+not\\s+give\\s+free\\s+windows\\b"
@@ -198,14 +179,12 @@
                 "positive_patterns": [
                   "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
                   "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
-                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
-                  "\\b(?:shed|trailer|RV)\\b",
-                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
-                  "\\bglass\\s+(?:repair|replacement)\\b",
-                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
                 ],
                 "negative_patterns": [
-                  "\\bA\\s+glass\\s+repair\\s+or\\s+door\\s+repair\\s+project,\\s+involving\\s+a\\s+shed,\\s+or\\s+a\\s+project\\s+only\\s+involving\\s+screen\\s+doors,\\s+egress\\s+windows,\\s+storm\\s+windows\\s+without\\s+full\\s+window\\s+replacement\\b"
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\b(?:glass|door)\\s+(?:repair|replacement)\\b"
                 ],
                 "pass_description": "Not a glass repair or door repair project, not involving a shed, not a project only involving screen doors, no egress windows, and no storm windows without full window replacement",
                 "fail_description": "A glass repair or door repair project, involving a shed, or a project only involving screen doors, egress windows, storm windows without full window replacement"
