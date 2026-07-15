@@ -91,6 +91,20 @@ test("ignored price concern is flagged", async () => {
   assert.equal(result.findings[0]?.type, "price_objection_not_handled");
 });
 
+test("Medicare service-boundary correction is treated as a valid rebuttal", async () => {
+  let evaluated = false;
+  const transcript = "Customer: Medicare says I can get a really good discount, but I think most of this is bullshit. Agent: Medicare is a government health plan. Any government assistance program would be something you would have to apply for with the Pennsylvania government. What we do is specialize in setting up free quotes for people who need windows. I'm sorry that you ran into that misleading ad. Have a good day.";
+  const result = await analyze(
+    transcript,
+    rawFinding("free_program_objection_not_handled", "I think most of this is bullshit.", "I'm sorry that you ran into that misleading ad."),
+    () => { evaluated = true; },
+  );
+  assert.equal(evaluated, false);
+  assert.equal(result.disposition.value, "excluded");
+  assert.match(result.disposition.reason, /corrected a misleading third-party program claim/i);
+  assert.equal(result.summary.total, 0);
+});
+
 test("busy customer with a scheduled callback is excluded without a model call", async () => {
   let evaluated = false;
   const transcript = `Customer: I am busy right now. Agent: I will call you back tomorrow at 2 PM.${pad}`;

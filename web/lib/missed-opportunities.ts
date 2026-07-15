@@ -88,8 +88,8 @@ export type MissedOpportunityModelPayload = {
   notes?: string;
 };
 
-export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.0.0";
-export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v1";
+export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.0.1";
+export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v2";
 export const DEFAULT_OPPORTUNITY_CONFIDENCE = 0.78;
 
 export function normalizeAnalysisMode(value: unknown): AnalysisMode {
@@ -195,6 +195,16 @@ function severityRank(value: MissedOpportunity["severity"]) {
   return value === "high" ? 3 : value === "medium" ? 2 : 1;
 }
 
+export function isServiceBoundaryCorrection(transcript: string) {
+  const mentionsExternalProgram = /\b(medicare|medicaid|government (?:assistance|grant|benefit|health|funding) (?:plan|program)?|free (?:window|roof(?:ing)?|product) program)\b/i.test(transcript);
+  const explainsExternalOwnership = /\b(?:medicare|medicaid) is (?:a )?government (?:health )?(?:plan|program)\b/i.test(transcript)
+    || /\b(?:you|they|the customer|someone) (?:would|would have|'d|must|has to|have to) (?:apply|contact).{0,120}\b(?:government|medicare|medicaid|agency)\b/is.test(transcript)
+    || /\b(?:government|medicare|medicaid).{0,100}\bnot (?:our|a service we|something we)\b/is.test(transcript);
+  const statesActualOffer = /\b(?:what we do|we (?:do|actually|only)|we specialize|our service).{0,180}\b(?:free )?(?:quotes?|estimates?|consultations?|appointments?)\b/is.test(transcript);
+  const correctsMisleadingClaim = /\b(?:misleading|incorrect|inaccurate|false) (?:ad|advertisement|claim|information)\b/i.test(transcript);
+  return mentionsExternalProgram && explainsExternalOwnership && (statesActualOffer || correctsMisleadingClaim);
+}
+
 export function createOpportunityCacheKey(transcript: string, model: string) {
   return [
     "missed_opportunities",
@@ -233,6 +243,7 @@ export function inferCallDisposition(transcript: string, transferOccurred = fals
   if (transferOccurred) return { value: "transferred", confidence: 1, reason: "A successful transfer is already recorded for the call." };
   if (clean.length < 80) return { value: "excluded", confidence: 1, reason: "Transcript is too short for supported opportunity analysis." };
   if (NO_CONTACT_PATTERNS.some((pattern) => pattern.test(clean))) return { value: "excluded", confidence: .99, reason: "The customer requested no further contact." };
+  if (isServiceBoundaryCorrection(clean)) return { value: "excluded", confidence: .98, reason: "The agent corrected a misleading third-party program claim and explained the service the company actually offers." };
   if (DISQUALIFIED_PATTERNS.some((pattern) => pattern.test(clean))) return { value: "excluded", confidence: .95, reason: "The transcript indicates the lead or requested service was disqualified." };
   if (HOSTILE_PATTERNS.some((pattern) => pattern.test(clean))) return { value: "excluded", confidence: .9, reason: "The transcript indicates a hostile or safety-sensitive ending." };
   if (BOOKED_PATTERNS.some((pattern) => pattern.test(clean))) return { value: "booked", confidence: .94, reason: "The transcript contains a supported appointment confirmation." };
@@ -303,7 +314,7 @@ export function aggregateMissedOpportunities(calls: Array<{ agent?: string; anal
 export function buildMissedOpportunityPrompt(transcript: string, windows: CandidateWindow[]) {
   const system = `You are a conservative sales-call QA auditor evaluating missed opportunities on a non-booked call.
 Return JSON only with this shape: {"identity":{"agentName":"","customerName":"","customerPhone":""},"findings":[{"type":"...","title":"...","summary":"...","severity":"low|medium|high","confidence":0.0,"customerTrigger":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"agentResponse":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"expectedAction":"...","suggestedResponse":"...","evidence":[{"speaker":"agent|customer|unknown","text":"exact quote","startTime":null,"endTime":null,"turnId":null}]}],"disposition":{"value":"booked|transferred|callback|not_booked|excluded|uncertain","confidence":0.0,"reason":"..."}}.
-Use only exact evidence present in the supplied transcript windows. Infer speaker roles only when context is reliable. Evaluate the next several turns after each objection, then check the call ending for later recovery, booking, transfer, callback, or another next step. Return no finding when uncertain, evidence is insufficient, the transcript is incomplete, speaker roles are unreliable, the customer requests no contact, the lead is disqualified, the service is unavailable, the customer is hostile, or the agent reasonably attempted recovery. Do not flag a weak response unless momentum was genuinely abandoned. Do not duplicate or stack findings on the same evidence. Confidence must be at least ${DEFAULT_OPPORTUNITY_CONFIDENCE} for every returned finding. Never invent quotes, timestamps, policy, or outcomes.`;
+Use only exact evidence present in the supplied transcript windows. Infer speaker roles only when context is reliable. Evaluate the next several turns after each objection, then check the call ending for later recovery, booking, transfer, callback, or another next step. Return no finding when uncertain, evidence is insufficient, the transcript is incomplete, speaker roles are unreliable, the customer requests no contact, the lead is disqualified, the service is unavailable, the customer is hostile, or the agent reasonably attempted recovery. A factual correction is a valid rebuttal when the customer asks about Medicare, Medicaid, government grants, free products, or another third-party benefit the company does not administer and the agent explains both that boundary and the actual offer, such as a free quote, estimate, or consultation. Do not instruct the agent to claim that a government or medical program provides company benefits. Distinguish a free quote or consultation from a free product or government-funded service. Do not flag a weak response unless momentum was genuinely abandoned. Do not duplicate or stack findings on the same evidence. Confidence must be at least ${DEFAULT_OPPORTUNITY_CONFIDENCE} for every returned finding. Never invent quotes, timestamps, policy, or outcomes.`;
   const user = JSON.stringify({
     analysisVersion: MISSED_OPPORTUNITY_ANALYSIS_VERSION,
     promptVersion: MISSED_OPPORTUNITY_PROMPT_VERSION,
@@ -402,7 +413,8 @@ export function finalizeMissedOpportunityAnalysis(options: {
   const allowedDispositions = new Set<CallDisposition["value"]>(["booked", "transferred", "callback", "not_booked", "excluded", "uncertain"]);
   const rawDisposition = options.raw.disposition;
   const rawDispositionConfidence = Math.max(0, Math.min(1, Number(rawDisposition?.confidence) || 0));
-  const disposition = rawDisposition?.value && allowedDispositions.has(rawDisposition.value) && rawDispositionConfidence >= .75
+  const preserveLocalDisposition = localDisposition.value === "booked" || localDisposition.value === "transferred" || localDisposition.value === "callback" || localDisposition.value === "excluded";
+  const disposition = !preserveLocalDisposition && rawDisposition?.value && allowedDispositions.has(rawDisposition.value) && rawDispositionConfidence >= .75
     ? { value: rawDisposition.value, confidence: rawDispositionConfidence, reason: String(rawDisposition.reason || "Cloud analysis disposition.").slice(0, 500) }
     : localDisposition;
   const cacheKey = createOpportunityCacheKey(options.transcript, options.selectedModel);
@@ -414,6 +426,7 @@ export function finalizeMissedOpportunityAnalysis(options: {
   if (!excluded) {
     for (const raw of options.raw.findings ?? []) {
       if (!raw.type || !OPPORTUNITY_TYPES.has(raw.type as OpportunityType)) continue;
+      if (raw.type === "free_program_objection_not_handled" && isServiceBoundaryCorrection(options.transcript)) continue;
       const confidence = Math.max(0, Math.min(1, Number(raw.confidence) || 0));
       if (confidence < minimumConfidence) continue;
       const trigger = cleanEvidence(raw.customerTrigger, "customer");
