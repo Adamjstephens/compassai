@@ -595,6 +595,20 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .review-summary span { display: block; color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
 .review-summary strong { display: block; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .85rem; }
 .review-summary a { align-self: center; color: var(--brand-dark); font-weight: 800; text-decoration: none; font-size: .82rem; }
+.critical-review-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 14px 0;
+  border: 2px solid var(--danger);
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 11px 13px;
+}
+.critical-review-alert svg { flex: 0 0 auto; }
+.critical-review-alert strong, .critical-review-alert span { display: block; }
+.critical-review-alert span { margin-top: 2px; font-size: .84rem; }
 .review-grid { grid-template-columns: minmax(650px, 1.2fr) minmax(390px, .8fr); padding: 14px; align-items: start; }
 .qa-pane, .transcript-panel { min-width: 0; }
 .pane-heading { min-height: 40px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

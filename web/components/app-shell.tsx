@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.4";
+const APP_VERSION = "0.5.5";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -571,35 +571,61 @@ function evidenceFromTranscript(transcript: string, proposed: string, fallback: 
   const clean = proposed.replace(/\s+/g, " ").trim();
   const exact = clean && transcript.toLowerCase().includes(clean.toLowerCase()) ? snippetFor(transcript, clean) : "";
   if (exact) {
-    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration) };
+    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration), verifiedForPass: true };
   }
   if (fallback?.result && !/^No clear evidence/i.test(fallback.result)) {
-    return { result: fallback.result, evidence_time: fallback.evidence_time };
+    return { result: fallback.result, evidence_time: fallback.evidence_time, verifiedForPass: fallback.status === "Pass" };
   }
   const quoted = /["“]([^"”]{8,120})["”]/.exec(proposed)?.[1] ?? "";
   const quoteSnippet = quoted ? snippetFor(transcript, quoted) : "";
   if (quoteSnippet) {
-    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration) };
+    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration), verifiedForPass: true };
   }
-  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "" };
+  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "", verifiedForPass: false };
 }
 
-function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
-  const fallbackByCheck = new Map(ruleRows.map((row) => [normalizeKey(row.check), row]));
-  const normalized = rows.map((row) => {
-    const fallback = fallbackByCheck.get(normalizeKey(row.check));
-    const evidence = evidenceFromTranscript(transcript, row.result || "", fallback, duration);
-    const modelTime = String(row.evidence_time || "");
+function ruleKey(value = "") {
+  return normalizeKey(value.replace(/^Critical:\s*/i, ""));
+}
+
+function canonicalStatus(value = "") {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "pass") return "Pass";
+  if (normalized === "fail") return "Fail";
+  if (normalized === "not applicable" || normalized === "n/a" || normalized === "na") return "Not applicable";
+  return "Needs review";
+}
+
+function isCriticalCategory(value = "") {
+  return value.trim().toLowerCase() === "critical";
+}
+
+function evidenceIsTranscriptBacked(transcript: string, evidence: string) {
+  const haystack = transcript.replace(/\s+/g, " ").trim().toLowerCase();
+  const needle = evidence.replace(/\s+/g, " ").trim().toLowerCase();
+  return needle.length >= 4 && haystack.includes(needle);
+}
+
+export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
+  const modelByCheck = new Map(rows.map((row) => [ruleKey(row.check), row]));
+  return ruleRows.map((fallback) => {
+    const row = modelByCheck.get(ruleKey(fallback.check));
+    const evidence = evidenceFromTranscript(transcript, row?.result || fallback.result || "", fallback, duration);
+    const modelTime = String(row?.evidence_time || "");
+    const category = fallback.category || row?.category || "Qualifier";
+    let status = canonicalStatus(row?.status || fallback.status);
+    if ((isCriticalCategory(category) && status === "Not applicable") || (status === "Pass" && !evidence.verifiedForPass)) {
+      status = "Needs review";
+    }
     return {
-      category: row.category || fallback?.category || "Qualifier",
-      check: row.check || fallback?.check || "QA check",
-      status: row.status || fallback?.status || "Needs review",
-      passed: (row.status || fallback?.status) === "Pass",
+      category,
+      check: fallback.check.replace(/^Critical:\s*/i, ""),
+      status,
+      passed: status === "Pass",
       result: evidence.result,
       evidence_time: /^\d{1,2}:\d{2}(?::\d{2})?$/.test(modelTime) && modelTime !== "00:00" ? modelTime : evidence.evidence_time,
     };
   });
-  return normalized.length ? normalized : ruleRows;
 }
 
 function readAscii(bytes: Uint8Array, offset: number, length: number) {
@@ -722,17 +748,17 @@ function gradeRule(rule: ScorecardRule, transcript: string, duration = 0): Analy
   };
 }
 
-function metrics(rows: AnalysisRow[], finalGrade = "Approved") {
-  const scored = rows.filter((row) => row.status !== "Not applicable");
+export function metrics(rows: AnalysisRow[], finalGrade?: string) {
+  const scored = rows.filter((row) => row.status !== "Not applicable" || isCriticalCategory(row.category));
   const passed = scored.filter((row) => row.status === "Pass").length;
   const qa_score = scored.length ? Math.round((passed / scored.length) * 100) : 0;
-  const criticalMiss = scored.some((row) => row.category === "Critical" && row.status !== "Pass");
+  const criticalMiss = rows.some((row) => isCriticalCategory(row.category) && row.status !== "Pass");
   return {
     qa_score,
     passed_count: passed,
     total_count: scored.length,
     outcome: criticalMiss ? "CRITICAL MISS" : qa_score >= 80 ? "PASS" : "NEEDS REVIEW",
-    final_grade: finalGrade,
+    final_grade: finalGrade ?? (criticalMiss ? "Needs second review" : "Approved"),
   };
 }
 
@@ -749,7 +775,16 @@ function editorRows(rows: AnalysisRow[]): EditorRow[] {
 }
 
 function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? [], finalGrade = result.metrics?.final_grade ?? "Approved") {
-  const rows = overrides.map((row) => ({
+  const hardenedOverrides = overrides.map((row) => {
+    if (!isCriticalCategory(row.Category)) return row;
+    const evidenceIsClear = evidenceIsTranscriptBacked(result.transcript_text, row.Evidence);
+    const harden = (status: string) => {
+      const canonical = canonicalStatus(status);
+      return canonical === "Not applicable" || (canonical === "Pass" && !evidenceIsClear) ? "Needs review" : canonical;
+    };
+    return { ...row, "System status": harden(row["System status"]), "Final status": harden(row["Final status"]) };
+  });
+  const rows = hardenedOverrides.map((row) => ({
     category: row.Category,
     check: row.Qualifier,
     status: row["Final status"],
@@ -759,10 +794,19 @@ function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? []
   }));
   return {
     ...result,
-    qa_overrides: overrides,
+    qa_overrides: hardenedOverrides,
     analysis: { ...result.analysis, rows },
     metrics: metrics(rows, finalGrade),
   };
+}
+
+export function hardenStoredResult(result: JobResult) {
+  const overrides = result.qa_overrides?.length ? result.qa_overrides : editorRows(result.analysis.rows ?? []);
+  const preview = applyOverrides(result, overrides, result.metrics?.final_grade);
+  const finalGrade = preview.metrics?.outcome === "CRITICAL MISS" && (!result.metrics?.final_grade || result.metrics.final_grade === "Approved")
+    ? "Needs second review"
+    : result.metrics?.final_grade;
+  return applyOverrides(result, overrides, finalGrade);
 }
 
 function makeErrorReport(stage: string, error: unknown, extra: Record<string, unknown> = {}) {
@@ -845,7 +889,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include the best MM:SS timestamp, exact short evidence snippet, and a concise explanation. status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
+            "You are a strict QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Return every configured scorecard criterion exactly once; never omit a criterion. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include the best MM:SS timestamp, exact short evidence snippet, and a concise explanation. For Critical criteria, Not applicable is forbidden: use Pass only with an exact supporting transcript quote, Fail when the failure is supported, and Needs review when evidence is missing or ambiguous. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Never award a critical Pass without transcript evidence. Do not include full transcripts.",
         },
         {
           role: "user",
@@ -953,7 +997,9 @@ export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
       const index = transcriptIndex++;
       const meta = callMeta(result, mirrorLeads);
       const transfer = result.analysis.transfer;
-      const evidenceRows = (result.qa_overrides ?? editorRows(result.analysis.rows ?? [])).map((row) => {
+      const callRows = result.qa_overrides ?? editorRows(result.analysis.rows ?? []);
+      const criticalIssueCount = callRows.filter((row) => isCriticalCategory(row.Category) && row["Final status"] !== "Pass").length;
+      const evidenceRows = callRows.map((row) => {
         const postTransfer = isPostTransfer(row.Time, transfer);
         return `<tr>
           <td class="qualifier-cell"><strong>${escapeHtml(row.Qualifier)}</strong><small>${escapeHtml(row.Category)}</small></td>
@@ -967,6 +1013,9 @@ export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
       const transferAlert = transfer?.occurred
         ? `<div class="transfer-alert"><strong>Transfer detected${transfer.time ? ` at ${escapeHtml(transfer.time)}` : ""}</strong><span>${escapeHtml(transfer.snippet || transfer.notes || "The AI identified a call handoff.")}</span></div>`
         : "";
+      const criticalAlert = criticalIssueCount
+        ? `<div class="critical-alert"><strong>&#9888; Critical review required</strong><span>${criticalIssueCount} critical criterion${criticalIssueCount === 1 ? " is" : " are"} unresolved or failed. This call cannot receive an automatic PASS.</span></div>`
+        : "";
       return `<article class="call-report">
         <header class="call-header"><span>Individual call report</span><h3>${escapeHtml(titleFor(result, mirrorLeads))}</h3></header>
         <div class="call-meta">
@@ -979,6 +1028,7 @@ export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
           <span>Grading time: <strong>${escapeHtml(fmtSeconds(result.grading_seconds))}</strong></span>
           ${meta.clover ? `<span>Clover: <a href="${escapeHtml(meta.clover)}">Open matched lead</a></span>` : ""}
         </div>
+        ${criticalAlert}
         ${transferAlert}
         ${freeAlerts(result.transcript_text).map((alert) => `<div class="free-alert">${escapeHtml(alert)}</div>`).join("")}
         <h4>QA assessment and evidence</h4>
@@ -991,7 +1041,7 @@ export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
     return `<details class="agent-section" open><summary><span>Agent</span><strong>${escapeHtml(agent)}</strong><em>${calls.length} call${calls.length === 1 ? "" : "s"} · ${average}% average QA · ${transferCount} transfer${transferCount === 1 ? "" : "s"}</em></summary>${callSections}</details>`;
   }).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>CompassAi Report</title><style>
-	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px;max-width:1800px;margin:auto}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:10px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:8px;padding:14px}.card span,.call-header span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}h4{margin:20px 0 8px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:8px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.qualifier-cell{white-space:normal;min-width:220px;max-width:320px}.qualifier-cell small{display:block;color:#64748b}.time-cell{min-width:145px}.post-transfer{display:block;width:max-content;margin-top:5px;border:1px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:4px;padding:3px 6px;font-size:11px;font-weight:900}.agent-section{background:#fff;border:1px solid #b9c5d3;border-radius:8px;margin:20px 0;padding:0 16px 16px}.agent-section>summary{cursor:pointer;padding:16px 0;display:flex;align-items:center;gap:12px}.agent-section>summary span{font-size:12px;color:#64748b;text-transform:uppercase;font-weight:800}.agent-section>summary strong{font-size:20px}.agent-section>summary em{margin-left:auto;color:#64748b;font-style:normal}.call-report{border-top:3px solid #0f766e;padding:18px 0 6px;margin:10px 0 22px}.call-header h3{margin:4px 0 12px;font-size:18px;overflow-wrap:break-word;word-break:normal}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:12px}.transfer-alert{border:2px solid #2563eb;background:#dbeafe;color:#1e3a8a;border-radius:8px;padding:11px 13px;font-weight:700;margin:10px 0}.transfer-alert strong,.transfer-alert span{display:block}.transfer-alert span{font-weight:500;margin-top:3px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media(max-width:720px){.page{padding:12px}.agent-section>summary{align-items:flex-start;flex-wrap:wrap}.agent-section>summary em{width:100%;margin-left:0}.search-row{grid-template-columns:1fr 1fr}.search-row input,.search-row span{grid-column:1/-1}}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call-report{break-inside:avoid}.agent-section{border:0;padding:0}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
+	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px;max-width:1800px;margin:auto}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:10px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:8px;padding:14px}.card span,.call-header span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}h4{margin:20px 0 8px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:8px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.qualifier-cell{white-space:normal;min-width:220px;max-width:320px}.qualifier-cell small{display:block;color:#64748b}.time-cell{min-width:145px}.post-transfer{display:block;width:max-content;margin-top:5px;border:1px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:4px;padding:3px 6px;font-size:11px;font-weight:900}.agent-section{background:#fff;border:1px solid #b9c5d3;border-radius:8px;margin:20px 0;padding:0 16px 16px}.agent-section>summary{cursor:pointer;padding:16px 0;display:flex;align-items:center;gap:12px}.agent-section>summary span{font-size:12px;color:#64748b;text-transform:uppercase;font-weight:800}.agent-section>summary strong{font-size:20px}.agent-section>summary em{margin-left:auto;color:#64748b;font-style:normal}.call-report{border-top:3px solid #0f766e;padding:18px 0 6px;margin:10px 0 22px}.call-header h3{margin:4px 0 12px;font-size:18px;overflow-wrap:break-word;word-break:normal}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:12px}.critical-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:11px 13px;font-weight:700;margin:10px 0}.critical-alert strong,.critical-alert span{display:block}.critical-alert span{font-weight:500;margin-top:3px}.transfer-alert{border:2px solid #2563eb;background:#dbeafe;color:#1e3a8a;border-radius:8px;padding:11px 13px;font-weight:700;margin:10px 0}.transfer-alert strong,.transfer-alert span{display:block}.transfer-alert span{font-weight:500;margin-top:3px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media(max-width:720px){.page{padding:12px}.agent-section>summary{align-items:flex-start;flex-wrap:wrap}.agent-section>summary em{width:100%;margin-left:0}.search-row{grid-template-columns:1fr 1fr}.search-row input,.search-row span{grid-column:1/-1}}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call-report{break-inside:avoid}.agent-section{border:0;padding:0}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
 	<div class="hero"><h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Polished web report with MirrorCXT matches, QA evidence, timestamps, and searchable transcripts.</p></div>
 	<div class="summary"><div class="card"><span>Calls</span><strong>${results.length}</strong></div><div class="card"><span>Total call time</span><strong>${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}</strong></div><div class="card"><span>MirrorCXT leads loaded</span><strong>${mirrorLeads.length}</strong></div><div class="card"><span>Average QA score</span><strong>${results.length ? Math.round(results.reduce((sum, result) => sum + (result.metrics?.qa_score ?? 0), 0) / results.length) : 0}%</strong></div></div>
 	<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Transfer</th><th>Call Time</th><th>Grading Time</th></tr></thead><tbody>${reviewRows}</tbody></table></div>
@@ -1089,7 +1139,12 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
 
   const refresh = useCallback(async () => {
     const stored = window.localStorage.getItem(JOB_STORAGE);
-    if (stored) setJobs(JSON.parse(stored));
+    if (stored) {
+      const parsed = JSON.parse(stored) as Job[];
+      const hardened = parsed.map((job) => ({ ...job, results: job.results.map(hardenStoredResult) }));
+      setJobs(hardened);
+      window.localStorage.setItem(JOB_STORAGE, JSON.stringify(hardened));
+    }
     const key = cleanApiKey(window.localStorage.getItem(OPENAI_KEY_STORAGE) ?? "");
     if (key) window.localStorage.setItem(OPENAI_KEY_STORAGE, key);
     setOpenaiApiKey(key);
@@ -2024,6 +2079,7 @@ function ReviewPanel({
   if (!item) return <section className="panel"><h3>QA review</h3><p>No completed calls yet.</p></section>;
   const result = item.result;
   const meta = callMeta(result, mirrorLeads);
+  const criticalIssues = rows.filter((row) => isCriticalCategory(row.Category) && row["Final status"] !== "Pass");
   const selectedIndex = Math.max(0, allResults.findIndex(({ result: candidate }) => candidate.result_id === result.result_id));
   const previous = allResults[selectedIndex - 1]?.result;
   const next = allResults[selectedIndex + 1]?.result;
@@ -2071,6 +2127,7 @@ function ReviewPanel({
           <div><span>Phone</span><strong>{meta.phone ? formatPhone(meta.phone) : "Not matched"}</strong></div>
           {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
         </div>
+        {criticalIssues.length > 0 && <div className="critical-review-alert" role="alert"><TriangleAlert size={20} /><div><strong>Critical review required</strong><span>{criticalIssues.length} critical criterion{criticalIssues.length === 1 ? " is" : " are"} unresolved or failed. This call cannot receive an automatic PASS.</span></div></div>}
 
         {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
         <div className="mobile-review-tabs" role="tablist" aria-label="Review content">
@@ -2087,7 +2144,7 @@ function ReviewPanel({
                   <tr key={`${row.Qualifier}-${index}`}>
                     <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
                     <td><span className="pill">{row["System status"]}</span></td>
-                    <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{["Pass", "Fail", "Needs review", "Not applicable"].map((status) => <option key={status}>{status}</option>)}</select></td>
+                    <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{(isCriticalCategory(row.Category) ? ["Pass", "Fail", "Needs review"] : ["Pass", "Fail", "Needs review", "Not applicable"]).map((status) => <option key={status}>{status}</option>)}</select></td>
                     <td><div className="evidence-time"><input value={row.Time} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Time: event.target.value } : r))} />{isPostTransfer(row.Time, result.analysis.transfer) && <span className="post-transfer-badge"><TriangleAlert size={13} /> Post-Transfer</span>}</div></td>
                     <td><textarea value={row.Evidence} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Evidence: event.target.value } : r))} /></td>
                     <td><textarea value={row["Reviewer note"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Reviewer note": event.target.value } : r))} /></td>
