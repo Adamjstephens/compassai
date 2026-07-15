@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.8";
+const APP_VERSION = "0.5.9";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -706,28 +706,32 @@ async function splitWavForVercelRelay(file: File) {
 function pickScorecard(transcript: string, library: ScorecardLibrary) {
   let best = activeScorecard(library) ?? library.scorecards[0];
   let client = "Unknown";
+  if (/bachman'?s|bachmans/i.test(transcript)) {
+    best = library.scorecards.find((entry) => /bachmans/i.test(entry.name)) ?? best;
+    return { entry: best, client: "Bachmans Roofing" };
+  }
+  if (/feldco/i.test(transcript)) {
+    best = library.scorecards.find((entry) => /feldco/i.test(entry.name)) ?? best;
+    return { entry: best, client: "Feldco" };
+  }
+  if (/\bpella\b/i.test(transcript)) {
+    best = library.scorecards.find((entry) => /pella/i.test(entry.name)) ?? best;
+    return { entry: best, client: "Pella Windows & Doors" };
+  }
+  if (/\bkqr\b|king\s+quality\s+roofing/i.test(transcript)) {
+    best = library.scorecards.find((entry) => /\bkqr\b/i.test(entry.name)) ?? best;
+    return { entry: best, client: "KQR" };
+  }
+  if (/\bqwd\b|renewal\s+by\s+andersen|renewal\s+by\s+anderson|\brba\b/i.test(transcript)) {
+    best = library.scorecards.find((entry) => /rba|qwd/i.test(entry.name)) ?? best;
+    return { entry: best, client: "QWD" };
+  }
   for (const entry of library.scorecards) {
     for (const patternGroup of entry.bundle?.client_patterns ?? []) {
       if ((patternGroup.patterns ?? []).some((pattern) => safeRegex(pattern)?.test(transcript))) {
         return { entry, client: patternGroup.name };
       }
     }
-  }
-  if (/bachman'?s|bachmans/i.test(transcript)) {
-    best = library.scorecards.find((entry) => /bachmans/i.test(entry.name)) ?? best;
-    client = "Bachmans Roofing";
-  } else if (/feldco/i.test(transcript)) {
-    best = library.scorecards.find((entry) => /feldco/i.test(entry.name)) ?? best;
-    client = "Feldco";
-  } else if (/\bpella\b/i.test(transcript)) {
-    best = library.scorecards.find((entry) => /pella/i.test(entry.name)) ?? best;
-    client = "Pella Windows & Doors";
-  } else if (/\bkqr\b|quality\s+windows/i.test(transcript)) {
-    best = library.scorecards.find((entry) => /\bkqr\b/i.test(entry.name)) ?? best;
-    client = "KQR";
-  } else if (/\bqwd\b|renewal\s+by\s+andersen|renewal\s+by\s+anderson|rba/i.test(transcript)) {
-    best = library.scorecards.find((entry) => /rba|qwd/i.test(entry.name)) ?? best;
-    client = "QWD";
   }
   return { entry: best, client };
 }
