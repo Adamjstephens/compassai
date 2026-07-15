@@ -44,11 +44,14 @@ USE_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
+ALLOWED_ORIGIN_VALUES = [origin.strip() for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
+ALLOW_ANY_ORIGIN = "*" in ALLOWED_ORIGIN_VALUES
+
 app = FastAPI(title="CompassAi API", version=APP_VERSION)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()],
-    allow_credentials=True,
+    allow_origins=["*"] if ALLOW_ANY_ORIGIN else ALLOWED_ORIGIN_VALUES,
+    allow_credentials=not ALLOW_ANY_ORIGIN,
     allow_methods=["*"],
     allow_headers=["*"],
 )

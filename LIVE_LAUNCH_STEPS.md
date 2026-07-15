@@ -34,7 +34,7 @@ Create this in Render:
 
 Render Web Service settings:
 
-- Root directory: `compassai/api`
+- Root directory: `api`
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
@@ -42,7 +42,7 @@ Render API environment variables:
 
 ```text
 COMPASSAI_JWT_SECRET=<same generated value used in Vercel>
-ALLOWED_ORIGINS=https://<vercel-domain>
+ALLOWED_ORIGINS=*
 COMPASSAI_FREE_HOSTING_MODE=true
 MAX_FILE_MB=250
 MAX_DAILY_AUDIO_MINUTES_PER_USER=300

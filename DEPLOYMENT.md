@@ -27,7 +27,7 @@ Required Render env vars:
 - `MAX_CONCURRENT_JOBS_PER_USER`
 - `RATE_LIMIT_PER_MINUTE`
 
-For the 100% free/no-payment launch, leave `DATABASE_URL` unset and use the Render Free web service only. This avoids expiring database trials and payment methods. The tradeoff is temporary/session-style storage on the API host, so users should export reports they want to keep. A paid persistent database can be added later by setting `DATABASE_URL`.
+For the 100% free/no-payment launch, leave `DATABASE_URL` unset and use the Render Free web service only. This avoids expiring database trials and payment methods. Set `ALLOWED_ORIGINS=*` until the final Vercel domain is known, or replace it with the exact Vercel domain later. The tradeoff is temporary/session-style storage on the API host, so users should export reports they want to keep. A paid persistent database can be added later by setting `DATABASE_URL`.
 
 OpenAI keys are not configured in Render. Each signed-in user pastes their own OpenAI API key in CompassAi Settings before processing recordings.
 
