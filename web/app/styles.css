@@ -15,6 +15,19 @@
   background: var(--bg);
 }
 
+:root[data-theme="dark"] {
+  --bg: #0c1118;
+  --panel: #121923;
+  --panel-soft: #182231;
+  --text: #e7edf6;
+  --muted: #9aa8ba;
+  --border: #273447;
+  --brand: #14b8a6;
+  --brand-dark: #2dd4bf;
+  --sidebar: #080d13;
+  --sidebar-text: #e7edf6;
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); }
 button, input, select, textarea { font: inherit; }
@@ -26,8 +39,10 @@ button {
   cursor: pointer;
   min-height: 36px;
   padding: 8px 12px;
+  transition: background .15s ease, border-color .15s ease, transform .12s ease, box-shadow .15s ease;
 }
-button:hover { background: var(--panel-soft); }
+button:hover { background: var(--panel-soft); box-shadow: 0 1px 0 rgba(15, 23, 42, .08); }
+button:active { transform: translateY(1px); }
 button:disabled { cursor: not-allowed; opacity: .55; }
 .primary { background: var(--brand); border-color: var(--brand); color: white; }
 .primary:hover { background: var(--brand-dark); }
@@ -38,6 +53,12 @@ input, select, textarea {
   background: white;
   color: var(--text);
   padding: 9px 11px;
+}
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background: #0e1622;
+  color: var(--text);
 }
 textarea { min-height: 140px; resize: vertical; }
 
@@ -117,7 +138,28 @@ main { padding: 22px; min-width: 0; }
   gap: 8px;
 }
 .job-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.job-head p { margin: 3px 0 0; color: var(--muted); }
 progress { width: 100%; height: 10px; }
+.progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.job-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.job-metrics span {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 8px 10px;
+}
+.job-metrics strong { color: var(--text); }
+.source-files { display: grid; gap: 3px; }
 small { color: var(--muted); overflow-wrap: break-word; }
 .result {
   text-align: left;
@@ -171,7 +213,7 @@ small { color: var(--muted); overflow-wrap: break-word; }
 .scorecard-tools label, .scorecard-editor label { display: grid; gap: 6px; font-weight: 800; }
 .scorecard-layout {
   display: grid;
-  grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.2fr);
+  grid-template-columns: minmax(260px, .55fr) minmax(640px, 1.45fr);
   gap: 14px;
   align-items: start;
 }
@@ -199,6 +241,56 @@ small { color: var(--muted); overflow-wrap: break-word; }
   cursor: pointer;
   font-weight: 900;
   margin-bottom: 8px;
+}
+.rubric-header {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.rubric-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-x: auto;
+  background: var(--panel);
+}
+.rubric-table {
+  min-width: 1420px;
+}
+.rubric-table th {
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: .78rem;
+  text-transform: uppercase;
+}
+.rubric-table td {
+  min-width: 150px;
+}
+.rubric-table td:nth-child(2),
+.rubric-table td:nth-child(4),
+.rubric-table td:nth-child(5),
+.rubric-table td:nth-child(7) {
+  min-width: 220px;
+}
+.rubric-table textarea {
+  min-height: 74px;
+  font-family: inherit;
+  font-size: .9rem;
+}
+.rubric-table input {
+  font-size: .9rem;
+}
+.critical-cell {
+  text-align: center;
+  min-width: 80px !important;
+}
+.critical-cell input {
+  width: 18px;
+  height: 18px;
+}
+.mini-actions {
+  display: grid;
+  gap: 6px;
 }
 .mirror-list { display: grid; gap: 10px; margin-top: 12px; }
 .mirror-list a { color: var(--brand-dark); font-weight: 800; }
@@ -321,6 +413,18 @@ iframe {
   border-radius: 10px;
   background: white;
   margin-top: 12px;
+}
+.panel, .job-card, .scorecard-list article, .mirror-list article, .review-call-picker, .api-key-box, .settings-grid div {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .04);
+}
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .job-card,
+:root[data-theme="dark"] .scorecard-list article,
+:root[data-theme="dark"] .mirror-list article,
+:root[data-theme="dark"] .review-call-picker,
+:root[data-theme="dark"] .api-key-box,
+:root[data-theme="dark"] .settings-grid div {
+  box-shadow: none;
 }
 .signout-form {
   position: fixed;

@@ -1,12 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ScorecardRule = {
   name: string;
   type?: string | null;
   positive_patterns?: string[];
   negative_patterns?: string[];
+  pass_description?: string;
+  fail_description?: string;
+  mishear_description?: string;
+};
+type RubricRow = {
+  id: string;
+  client_name: string;
+  client_aliases: string;
+  qualifier_name: string;
+  what_counts_as_pass: string;
+  what_counts_as_fail: string;
+  critical: boolean;
+  common_mishears: string;
 };
 type ScorecardEntry = {
   id: string;
@@ -44,11 +57,21 @@ type JobResult = {
   file_name: string;
   label?: string;
   transcript_text: string;
-  analysis: { client?: string; source?: string; scorecard_name?: string; rows?: AnalysisRow[]; notes?: string };
+  analysis: {
+    client?: string;
+    source?: string;
+    scorecard_name?: string;
+    rows?: AnalysisRow[];
+    notes?: string;
+    agent_name?: string;
+    customer_name?: string;
+    customer_phone?: string;
+  };
   qa_overrides?: EditorRow[];
   metrics?: { qa_score: number; passed_count: number; total_count: number; outcome: string; final_grade: string };
   llm_error_report?: string;
   duration_seconds?: number;
+  grading_seconds?: number;
 };
 type Job = {
   job_id: string;
@@ -70,9 +93,10 @@ const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const DEFAULT_QA_MODEL = "gpt-4o-mini";
 const TRANSCRIPTION_MODEL_STORAGE = "compassai.transcriptionModel";
 const QA_MODEL_STORAGE = "compassai.qaModel";
-const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"];
-const QA_MODELS = ["gpt-4o-mini", "gpt-4.1-mini"];
-const APP_VERSION = "0.3.0";
+const THEME_STORAGE = "compassai.theme";
+const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
+const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
+const APP_VERSION = "0.4.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -107,6 +131,14 @@ function redactSensitive(value: unknown) {
   return String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-...redacted...");
 }
 
+function validTranscriptionModel(value = "") {
+  return TRANSCRIPTION_MODELS.includes(value) ? value : DEFAULT_TRANSCRIPTION_MODEL;
+}
+
+function validQaModel(value = "") {
+  return QA_MODELS.includes(value) ? value : DEFAULT_QA_MODEL;
+}
+
 function normalizePhone(value = "") {
   const digits = value.replace(/\D/g, "");
   return digits.length >= 10 ? digits.slice(-10) : digits;
@@ -117,18 +149,58 @@ function formatPhone(value = "") {
   return phone.length === 10 ? `(${phone.slice(0, 3)}) ${phone.slice(3, 6)}-${phone.slice(6)}` : value;
 }
 
+function titleCaseName(value = "") {
+  return value
+    .replace(/[^a-zA-Z.' -]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function extractAgentName(transcript = "") {
   const patterns = [
-    /\bthis is\s+([A-Z][a-z]{1,24})\b/,
-    /\bmy name is\s+([A-Z][a-z]{1,24})\b/,
-    /\b([A-Z][a-z]{1,24})\s+speaking\b/,
-    /\b([A-Z][a-z]{1,24})\s+here\s+from\b/,
+    /\b(?:this is|my name is|you['’]?re speaking with)\s+([a-z][a-z.'-]{1,24})\b/i,
+    /\b([a-z][a-z.'-]{1,24})\s+(?:here|calling)\s+(?:from|on behalf of)\b/i,
+    /\b([a-z][a-z.'-]{1,24})\s+speaking\b/i,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(transcript);
-    if (match?.[1]) return match[1];
+    if (match?.[1]) return titleCaseName(match[1]);
   }
   return "";
+}
+
+function extractCustomerName(transcript = "", agentName = "") {
+  const patterns = [
+    /\b(?:hi|hello|hey)\s+([a-z][a-z.'-]{1,24})(?=[,.\s])/i,
+    /\bis\s+this\s+([a-z][a-z.'-]{1,24})\b/i,
+    /\bam\s+i\s+speaking\s+(?:with|to)\s+([a-z][a-z.'-]{1,24})\b/i,
+    /\b(?:thanks|thank you),?\s+([a-z][a-z.'-]{1,24})\b/i,
+  ];
+  const agent = normalizeKey(agentName);
+  for (const pattern of patterns) {
+    const match = pattern.exec(transcript);
+    const candidate = titleCaseName(match?.[1] || "");
+    if (candidate && normalizeKey(candidate) !== agent) return candidate;
+  }
+  return "";
+}
+
+function extractCustomerPhone(transcript = "") {
+  return /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.exec(transcript)?.[0] ?? "";
+}
+
+function transcriptIdentity(transcript = "") {
+  const agent = extractAgentName(transcript);
+  return {
+    agent_name: agent,
+    customer_name: extractCustomerName(transcript, agent),
+    customer_phone: extractCustomerPhone(transcript),
+  };
 }
 
 function resultPhones(result: JobResult) {
@@ -150,10 +222,11 @@ function matchMirrorLead(result: JobResult, mirrorLeads: MirrorLead[] = []) {
 
 function callMeta(result: JobResult, mirrorLeads: MirrorLead[] = []) {
   const lead = matchMirrorLead(result, mirrorLeads);
+  const transcriptMeta = transcriptIdentity(result.transcript_text);
   return {
-    agent: extractAgentName(result.transcript_text),
-    customer: lead?.customer || "",
-    phone: lead?.phone || "",
+    agent: result.analysis?.agent_name || transcriptMeta.agent_name,
+    customer: result.analysis?.customer_name || lead?.customer || transcriptMeta.customer_name,
+    phone: result.analysis?.customer_phone || lead?.phone || transcriptMeta.customer_phone,
     clover: lead?.clover_url || "",
     disposition: lead?.disposition || "",
     lead,
@@ -216,51 +289,145 @@ function scorecardSummary(entry: ScorecardEntry) {
   return entry.summary || `${clientSets} client set(s), ${universal} universal rule(s), ${critical} critical check(s), ${aliases} aliases`;
 }
 
-function patternsToText(entry?: ScorecardEntry) {
-  return (entry?.bundle?.client_patterns ?? [])
-    .map((group) => `${group.name}: ${(group.patterns ?? []).join(", ")}`)
-    .join("\n");
-}
-
-function rulesToText(rules: ScorecardRule[] = []) {
-  return rules
-    .map((rule) => {
-      const positives = (rule.positive_patterns ?? []).join(", ");
-      const negatives = (rule.negative_patterns ?? []).join(", ");
-      return `${rule.name} | ${positives} | ${negatives}`;
-    })
-    .join("\n");
-}
-
-function parsePatternText(value: string) {
+function splitFriendlyList(value = "") {
   return value
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [name, rawPatterns = ""] = line.split(/:(.*)/s);
-      return {
-        name: (name || "Client").trim(),
-        patterns: rawPatterns.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
-      };
-    })
-    .filter((group) => group.name && group.patterns.length);
+    .split(/[;\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item && item.toLowerCase() !== "undefined");
 }
 
-function parseRuleText(value: string, fallbackType: string) {
-  return value
-    .split(/\n+/)
-    .map((line) => line.trim())
+function phraseToPattern(phrase: string) {
+  const trimmed = phrase.trim();
+  if (!trimmed) return "";
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  return `\\b${escaped}\\b`;
+}
+
+function cleanPatternForEditor(pattern = "") {
+  return pattern
+    .replace(/\\b/g, "")
+    .replace(/\\s[+*?]?/g, " ")
+    .replace(/\(\?:/g, "")
+    .replace(/[()]/g, "")
+    .replace(/\\[-]/g, "-")
+    .replace(/\\([.?+*|[\]{}])/g, "$1")
+    .replace(/\[\^?[^\\]]+\]/g, "")
+    .replace(/[|]/g, "; ")
+    .replace(/\s+/g, " ")
+    .replace(/;+(\s*;)+/g, ";")
+    .trim();
+}
+
+function patternText(patterns: string[] = []) {
+  return patterns
+    .map(cleanPatternForEditor)
     .filter(Boolean)
-    .map((line) => {
-      const [name = "", positives = "", negatives = ""] = line.split("|").map((part) => part.trim());
-      return {
-        name: name || "New qualifier",
-        type: fallbackType,
-        positive_patterns: positives.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
-        negative_patterns: negatives.split(/[,;]+/).map((pattern) => pattern.trim()).filter(Boolean),
-      };
-    });
+    .join("; ");
+}
+
+function rulePassText(rule: ScorecardRule) {
+  return rule.pass_description || patternText(rule.positive_patterns);
+}
+
+function ruleFailText(rule: ScorecardRule) {
+  return rule.fail_description || patternText(rule.negative_patterns);
+}
+
+function ruleMishearText(rule: ScorecardRule) {
+  return rule.mishear_description || "";
+}
+
+function makeRubricRow(clientName: string, aliases: string, rule?: ScorecardRule, critical = false): RubricRow {
+  return {
+    id: uuid(),
+    client_name: clientName,
+    client_aliases: aliases,
+    qualifier_name: rule?.name?.replace(/^Critical:\s*/i, "") || "",
+    what_counts_as_pass: rule ? rulePassText(rule) : "",
+    what_counts_as_fail: rule ? ruleFailText(rule) : "",
+    critical,
+    common_mishears: rule ? ruleMishearText(rule) : "",
+  };
+}
+
+function rubricRowsFromEntry(entry?: ScorecardEntry) {
+  if (!entry?.bundle) return [makeRubricRow("", "", undefined, false)];
+  const defaultClient = entry.bundle.client_patterns?.[0]?.name || entry.name || "";
+  const defaultAliases = (entry.bundle.client_patterns?.[0]?.patterns ?? []).map(cleanPatternForEditor).filter(Boolean).join("; ");
+  const rows: RubricRow[] = [];
+
+  for (const rule of entry.bundle.universal_rules ?? []) {
+    if (rule.name === "Client identified") continue;
+    rows.push(makeRubricRow(defaultClient, defaultAliases, rule, false));
+  }
+  for (const set of Object.values(entry.bundle.client_rule_sets ?? {})) {
+    const clientName = set.clients?.[0] || defaultClient;
+    const aliasGroup = entry.bundle.client_patterns?.find((group) => group.name === clientName);
+    const aliases = (aliasGroup?.patterns ?? []).map(cleanPatternForEditor).filter(Boolean).join("; ") || defaultAliases;
+    for (const rule of set.rules ?? []) {
+      rows.push(makeRubricRow(clientName, aliases, rule, false));
+    }
+  }
+  for (const rule of entry.bundle.critical_checks ?? []) {
+    rows.push(makeRubricRow(defaultClient, defaultAliases, rule, true));
+  }
+  return rows.length ? rows : [makeRubricRow(defaultClient, defaultAliases, undefined, false)];
+}
+
+function rowToRule(row: RubricRow, fallbackType: string): ScorecardRule {
+  const name = row.qualifier_name.trim() || "New qualifier";
+  const passPhrases = splitFriendlyList(row.what_counts_as_pass);
+  const failPhrases = splitFriendlyList(row.what_counts_as_fail);
+  return {
+    name,
+    type: fallbackType,
+    positive_patterns: passPhrases.map(phraseToPattern).filter(Boolean),
+    negative_patterns: failPhrases.map(phraseToPattern).filter(Boolean),
+    pass_description: passPhrases.join("; "),
+    fail_description: failPhrases.join("; "),
+    mishear_description: splitFriendlyList(row.common_mishears).join("; "),
+  };
+}
+
+function bundleFromRubricRows(original: Record<string, unknown>, name: string, rows: RubricRow[]) {
+  const usable = rows.filter((row) => row.client_name.trim() || row.qualifier_name.trim());
+  const clientMap = new Map<string, { aliases: Set<string>; rules: ScorecardRule[] }>();
+  const universalRules: ScorecardRule[] = [];
+  const criticalChecks: ScorecardRule[] = [];
+
+  for (const row of usable) {
+    const client = row.client_name.trim() || name || "Default client";
+    const aliases = splitFriendlyList(row.client_aliases || client);
+    if (!clientMap.has(client)) clientMap.set(client, { aliases: new Set([client]), rules: [] });
+    const clientInfo = clientMap.get(client)!;
+    aliases.forEach((alias) => clientInfo.aliases.add(alias));
+    const rule = rowToRule(row, row.critical ? "Critical" : "Qualifier");
+    if (row.critical) {
+      criticalChecks.push(rule);
+    } else {
+      clientInfo.rules.push(rule);
+    }
+  }
+
+  const client_patterns = [...clientMap.entries()].map(([client, info]) => ({
+    name: client,
+    patterns: [...info.aliases].map(phraseToPattern).filter(Boolean),
+  }));
+  const client_rule_sets = Object.fromEntries(
+    [...clientMap.entries()].map(([client, info]) => [
+      client.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "client",
+      { clients: [client], rules: info.rules },
+    ]),
+  );
+
+  return {
+    ...original,
+    name,
+    client_patterns,
+    universal_rules: universalRules,
+    client_rule_sets,
+    critical_checks: criticalChecks,
+  };
 }
 
 function normalizeScorecardLibrary(library: ScorecardLibrary): ScorecardLibrary {
@@ -575,7 +742,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a QA auditor. Return compact JSON only: {rows:[{check,status,result,evidence_time,category}],notes}. status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
+            "You are a QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,rows:[{check,status,result,evidence_time,category}],notes}. Identify agent/customer from transcript context when clear, such as greetings and introductions. status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
         },
         {
           role: "user",
@@ -591,7 +758,13 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
   const text = await response.text();
   if (!response.ok) throw new Error(`CompassAi QA relay HTTP ${response.status}: ${text.slice(0, 700)}`);
   const payload = JSON.parse(text);
-  return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as { rows?: AnalysisRow[]; notes?: string };
+  return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as {
+    rows?: AnalysisRow[];
+    notes?: string;
+    agent_name?: string;
+    customer_name?: string;
+    customer_phone?: string;
+  };
 }
 
 function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duration = 0) {
@@ -655,6 +828,7 @@ function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
         <td>${m?.qa_score ?? 0}%</td>
         <td>${escapeHtml(m?.outcome)}</td>
         <td>${escapeHtml(fmtSeconds(result.duration_seconds))}</td>
+        <td>${escapeHtml(fmtSeconds(result.grading_seconds))}</td>
       </tr>`;
     })
     .join("");
@@ -683,7 +857,7 @@ function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
 	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:14px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:10px;padding:14px}.card span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:10px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.call{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:16px;margin:16px 0}.call h2{margin-top:0}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:10px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call{break-inside:avoid}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
 	<div class="hero"><h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Polished web report with MirrorCXT matches, QA evidence, timestamps, and searchable transcripts.</p></div>
 	<div class="summary"><div class="card"><span>Calls</span><strong>${results.length}</strong></div><div class="card"><span>Total call time</span><strong>${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}</strong></div><div class="card"><span>MirrorCXT leads loaded</span><strong>${mirrorLeads.length}</strong></div><div class="card"><span>Average QA score</span><strong>${results.length ? Math.round(results.reduce((sum, result) => sum + (result.metrics?.qa_score ?? 0), 0) / results.length) : 0}%</strong></div></div>
-	<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Call Time</th></tr></thead><tbody>${rows}</tbody></table></div>
+		<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Call Time</th><th>Grading Time</th></tr></thead><tbody>${rows}</tbody></table></div>
 	<h2>QA Evidence</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Qualifier</th><th>Status</th><th>Time</th><th>Evidence</th><th>Reviewer Note</th></tr></thead><tbody>${evidence}</tbody></table></div>
 	<h2>MirrorCXT Links</h2><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Disposition</th><th>Clover</th><th>Raw label</th></tr></thead><tbody>${mirrorLeads.map((lead) => `<tr><td>${escapeHtml(lead.customer || "")}</td><td>${escapeHtml(lead.phone ? formatPhone(lead.phone) : "")}</td><td>${escapeHtml(lead.disposition || "")}</td><td>${lead.clover_url ? `<a href="${escapeHtml(lead.clover_url)}">Open Clover</a>` : ""}</td><td class="long">${escapeHtml(lead.label)}</td></tr>`).join("")}</tbody></table></div>
 	${transcriptSections}</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id);var s=state[id];if(!t||!s)return;var count=document.querySelector('[data-count="'+id+'"]');if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&'),'gi');var i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i);i++;return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches';}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next');var input=document.querySelector('[data-target="'+id+'"]');var s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
@@ -707,15 +881,24 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [scorecardEditor, setScorecardEditor] = useState("");
   const [scorecardName, setScorecardName] = useState("");
-  const [scorecardAliases, setScorecardAliases] = useState("");
-  const [universalRules, setUniversalRules] = useState("");
-  const [criticalRules, setCriticalRules] = useState("");
+  const [rubricRows, setRubricRows] = useState<RubricRow[]>([]);
   const [transcriptionModel, setTranscriptionModel] = useState(DEFAULT_TRANSCRIPTION_MODEL);
   const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [editingScorecardId, setEditingScorecardId] = useState("");
+  const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
+  const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
   const selected = results.find((item) => item.result.result_id === selectedResultId) ?? results[0];
+
+  function focusScorecardEditor() {
+    window.setTimeout(() => {
+      scorecardEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scorecardNameInputRef.current?.focus({ preventScroll: true });
+      scorecardNameInputRef.current?.select();
+    }, 80);
+  }
 
   const persistJobs = useCallback((next: Job[]) => {
     setJobs(next);
@@ -736,8 +919,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     if (key) window.localStorage.setItem(OPENAI_KEY_STORAGE, key);
     setOpenaiApiKey(key);
     setApiKeyDraft(key);
-    setTranscriptionModel(window.localStorage.getItem(TRANSCRIPTION_MODEL_STORAGE) || DEFAULT_TRANSCRIPTION_MODEL);
-    setQaModel(window.localStorage.getItem(QA_MODEL_STORAGE) || DEFAULT_QA_MODEL);
+    setTranscriptionModel(validTranscriptionModel(window.localStorage.getItem(TRANSCRIPTION_MODEL_STORAGE) || DEFAULT_TRANSCRIPTION_MODEL));
+    setQaModel(validQaModel(window.localStorage.getItem(QA_MODEL_STORAGE) || DEFAULT_QA_MODEL));
+    setTheme(window.localStorage.getItem(THEME_STORAGE) === "dark" ? "dark" : "light");
     setStatus(key ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
     setCloudStatus(key ? "Saved key; run connection test" : "No OpenAI key saved");
   }, []);
@@ -758,11 +942,14 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const selected = scorecards.scorecards.find((entry) => entry.id === editingScorecardId) ?? activeScorecard(scorecards);
     setEditingScorecardId(selected?.id ?? "");
     setScorecardName(selected?.name ?? "");
-    setScorecardAliases(patternsToText(selected));
-    setUniversalRules(rulesToText(selected?.bundle?.universal_rules));
-    setCriticalRules(rulesToText(selected?.bundle?.critical_checks));
+    setRubricRows(rubricRowsFromEntry(selected));
     setScorecardEditor(JSON.stringify(selected?.bundle ?? {}, null, 2));
   }, [scorecards?.active_scorecard_id]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE, theme);
+  }, [theme]);
 
   async function upload() {
     if (!files?.length || !scorecards) return;
@@ -776,9 +963,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const job: Job = {
       job_id: uuid(),
       status: "running",
-      message: "Starting Vercel-side OpenAI processing...",
+      message: "Preparing recordings for cloud transcription...",
       progress: 0.02,
       percent: 2,
+      elapsed_seconds: 0,
+      eta_seconds: undefined,
       source_files: Array.from(files).map((file) => file.name),
       results: [],
     };
@@ -788,16 +977,26 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     try {
       for (const [index, file] of Array.from(files).entries()) {
         const update = (patch: Partial<Job>) => {
+          const elapsed = Math.round((Date.now() - started) / 1000);
+          const nextProgress = Math.max(0.01, Math.min(1, patch.progress ?? nextJobs.find((candidate) => candidate.job_id === job.job_id)?.progress ?? 0.01));
+          const eta = nextProgress > 0.03 && nextProgress < 0.99 ? Math.max(1, Math.round((elapsed / nextProgress) - elapsed)) : patch.eta_seconds;
           nextJobs = nextJobs.map((candidate) =>
             candidate.job_id === job.job_id
-              ? { ...candidate, ...patch, elapsed_seconds: Math.round((Date.now() - started) / 1000) }
+              ? { ...candidate, ...patch, elapsed_seconds: elapsed, eta_seconds: eta }
               : candidate,
           );
           persistJobs(nextJobs);
         };
-        update({ message: `Transcribing ${file.name}...`, progress: index / files.length + 0.05, percent: Math.round((index / files.length) * 100) });
+        update({
+          message: `Transcribing ${file.name} (${index + 1} of ${files.length})...`,
+          progress: index / files.length + 0.05,
+          percent: Math.max(2, Math.round((index / files.length) * 100)),
+        });
         const transcriptPayload = await transcribeDirect(file, cleanApiKey(openaiApiKey), transcriptionModel);
+        const gradingStarted = Date.now();
         const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
+        const localIdentity = transcriptIdentity(transcriptPayload.transcript);
+        let qaIdentity = { ...localIdentity };
         let rows = ruleAnalysis.rows;
         let source = transcriptPayload.chunked
           ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
@@ -805,8 +1004,17 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         if (transcriptPayload.model_fallback) source += ` | ${transcriptPayload.model_fallback}`;
         let report = "";
         try {
-          update({ message: `Running cloud QA for ${file.name}...`, progress: (index + 0.65) / files.length, percent: Math.round(((index + 0.65) / files.length) * 100) });
+          update({
+            message: `Running QA review for ${file.name} (${index + 1} of ${files.length})...`,
+            progress: (index + 0.65) / files.length,
+            percent: Math.round(((index + 0.65) / files.length) * 100),
+          });
           const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
+          qaIdentity = {
+            agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
+            customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
+            customer_phone: qa.customer_phone || localIdentity.customer_phone,
+          };
           if (Array.isArray(qa.rows) && qa.rows.length) {
             rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
             source = transcriptPayload.chunked
@@ -825,18 +1033,30 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           file_name: file.name,
           transcript_text: transcriptPayload.transcript,
           duration_seconds: transcriptPayload.duration,
+          grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
           analysis: {
             client: ruleAnalysis.client,
             scorecard_name: ruleAnalysis.entry.name,
             source,
             rows,
+            agent_name: qaIdentity.agent_name,
+            customer_name: qaIdentity.customer_name,
+            customer_phone: qaIdentity.customer_phone,
           },
           qa_overrides: editorRows(rows),
           metrics: metrics(rows),
           llm_error_report: report,
         };
         nextJobs = nextJobs.map((candidate) =>
-          candidate.job_id === job.job_id ? { ...candidate, results: [...candidate.results, result] } : candidate,
+          candidate.job_id === job.job_id
+            ? {
+                ...candidate,
+                results: [...candidate.results, result],
+                message: `Finished ${index + 1} of ${files.length} recording(s).`,
+                progress: (index + 1) / files.length,
+                percent: Math.round(((index + 1) / files.length) * 100),
+              }
+            : candidate,
         );
         persistJobs(nextJobs);
       }
@@ -848,7 +1068,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       persistJobs(nextJobs);
       setStatus(`Completed ${files.length} file(s).`);
     } catch (caught) {
-      const report = makeErrorReport("Vercel transcription relay workflow", caught, { files: Array.from(files).map((file) => file.name).join(", ") });
+      const report = makeErrorReport("Cloud transcription relay workflow", caught, { files: Array.from(files).map((file) => file.name).join(", ") });
       nextJobs = nextJobs.map((candidate) =>
         candidate.job_id === job.job_id ? { ...candidate, status: "failed", message: "Processing failed.", progress: 1, percent: 100, error_report: report } : candidate,
       );
@@ -901,25 +1121,19 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   function editScorecard(scorecardId: string) {
     const entry = scorecards?.scorecards.find((item) => item.id === scorecardId);
     if (!entry) return;
+    setView("scorecards");
     setEditingScorecardId(entry.id);
     setScorecardName(entry.name);
-    setScorecardAliases(patternsToText(entry));
-    setUniversalRules(rulesToText(entry.bundle?.universal_rules));
-    setCriticalRules(rulesToText(entry.bundle?.critical_checks));
+    setRubricRows(rubricRowsFromEntry(entry));
     setScorecardEditor(JSON.stringify(entry.bundle, null, 2));
+    focusScorecardEditor();
   }
 
   function saveScorecardEdit(mode: "update" | "add") {
     if (!scorecards) return;
     try {
       const original = JSON.parse(scorecardEditor || "{}");
-      const bundle = {
-        ...original,
-        name: scorecardName.trim() || original.name || "Unnamed scorecard",
-        client_patterns: parsePatternText(scorecardAliases),
-        universal_rules: parseRuleText(universalRules, "Universal"),
-        critical_checks: parseRuleText(criticalRules, "Critical"),
-      };
+      const bundle = bundleFromRubricRows(original, scorecardName.trim() || original.name || "Unnamed scorecard", rubricRows);
       const entry: ScorecardEntry = {
         id: mode === "update" && editingScorecardId ? editingScorecardId : `${bundle.name || "scorecard"}-${Date.now()}`,
         name: scorecardName.trim() || bundle.name || "Unnamed scorecard",
@@ -930,9 +1144,30 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         : [...scorecards.scorecards, entry];
       persistScorecards({ active_scorecard_id: entry.id, scorecards: next });
       setEditingScorecardId(entry.id);
+      setScorecardEditor(JSON.stringify(bundle, null, 2));
     } catch (caught) {
-      setError(`Could not save scorecard JSON: ${caught instanceof Error ? caught.message : String(caught)}`);
+      setError(`Could not save scorecard: ${caught instanceof Error ? caught.message : String(caught)}`);
     }
+  }
+
+  function updateRubricRow(rowId: string, patch: Partial<RubricRow>) {
+    setRubricRows((current) => current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
+  }
+
+  function addRubricRow() {
+    const previous = rubricRows.at(-1);
+    setRubricRows((current) => [
+      ...current,
+      makeRubricRow(previous?.client_name || scorecardName || "", previous?.client_aliases || scorecardName || "", undefined, false),
+    ]);
+  }
+
+  function duplicateRubricRow(row: RubricRow) {
+    setRubricRows((current) => [...current, { ...row, id: uuid(), qualifier_name: `${row.qualifier_name} copy` }]);
+  }
+
+  function removeRubricRow(rowId: string) {
+    setRubricRows((current) => (current.length > 1 ? current.filter((row) => row.id !== rowId) : current));
   }
 
   function deleteScorecard(scorecardId: string) {
@@ -977,9 +1212,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   }
 
   function saveModelSettings() {
-    window.localStorage.setItem(TRANSCRIPTION_MODEL_STORAGE, transcriptionModel);
-    window.localStorage.setItem(QA_MODEL_STORAGE, qaModel);
-    setStatus(`Model settings saved: ${transcriptionModel} transcription, ${qaModel} QA.`);
+    const savedTranscriptionModel = validTranscriptionModel(transcriptionModel);
+    const savedQaModel = validQaModel(qaModel);
+    window.localStorage.setItem(TRANSCRIPTION_MODEL_STORAGE, savedTranscriptionModel);
+    window.localStorage.setItem(QA_MODEL_STORAGE, savedQaModel);
+    setTranscriptionModel(savedTranscriptionModel);
+    setQaModel(savedQaModel);
+    setStatus(`Model settings saved: ${savedTranscriptionModel} transcription, ${savedQaModel} QA.`);
   }
 
   async function testOpenAiConnection() {
@@ -1111,7 +1350,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <div className="panel-title">
               <div>
                 <h3>Scorecards</h3>
-                <p>Edit scorecard names, client aliases, qualifiers, and critical checks. Changes are saved in this browser.</p>
+                <p>Build and edit scorecards with plain-language rubric rows. Changes are saved in this browser.</p>
               </div>
               <button onClick={resetBundledScorecards} disabled={busy}>Restore bundled</button>
             </div>
@@ -1147,20 +1386,50 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                   </article>
                 ))}
               </div>
-              <div className="scorecard-editor">
+              <div className="scorecard-editor" ref={scorecardEditorRef} tabIndex={-1}>
                 <h4>{editingScorecardId ? "Edit scorecard" : "Add scorecard"}</h4>
-                <label>Scorecard name
-                  <input value={scorecardName} onChange={(event) => setScorecardName(event.target.value)} placeholder="Feldco" />
-                </label>
-                <label>Client aliases and detection patterns
-                  <textarea className="short-editor" value={scorecardAliases} onChange={(event) => setScorecardAliases(event.target.value)} placeholder="Feldco: feldco, feldco windows" />
-                </label>
-                <label>Universal qualifiers
-                  <textarea className="short-editor" value={universalRules} onChange={(event) => setUniversalRules(event.target.value)} placeholder="Homeowner confirmed | homeowner|decision maker | renter|not homeowner" />
-                </label>
-                <label>Critical checks
-                  <textarea className="short-editor" value={criticalRules} onChange={(event) => setCriticalRules(event.target.value)} placeholder="No unapproved quote | free quote|estimate | price guaranteed" />
-                </label>
+                <div className="rubric-header">
+                  <label>Scorecard name
+                    <input ref={scorecardNameInputRef} value={scorecardName} onChange={(event) => setScorecardName(event.target.value)} placeholder="Feldco" />
+                  </label>
+                  <button onClick={addRubricRow}>Add qualifier row</button>
+                </div>
+                <p className="hint">Use semicolons between phrases. Example: <strong>homeowner; I own the home; yes, I own it</strong>. Common mishears can use <strong>wrong phrase -&gt; correct phrase</strong>.</p>
+                <div className="rubric-table-wrap">
+                  <table className="rubric-table">
+                    <thead>
+                      <tr>
+                        <th>Client</th>
+                        <th>Aliases</th>
+                        <th>Qualifier</th>
+                        <th>Counts as pass</th>
+                        <th>Counts as fail</th>
+                        <th>Critical</th>
+                        <th>Common mishears</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rubricRows.map((row) => (
+                        <tr key={row.id}>
+                          <td><input value={row.client_name} onChange={(event) => updateRubricRow(row.id, { client_name: event.target.value })} placeholder="Feldco" /></td>
+                          <td><textarea value={row.client_aliases} onChange={(event) => updateRubricRow(row.id, { client_aliases: event.target.value })} placeholder="Feldco; Feldco Windows" /></td>
+                          <td><input value={row.qualifier_name} onChange={(event) => updateRubricRow(row.id, { qualifier_name: event.target.value })} placeholder="Homeowner confirmed" /></td>
+                          <td><textarea value={row.what_counts_as_pass} onChange={(event) => updateRubricRow(row.id, { what_counts_as_pass: event.target.value })} placeholder="homeowner; I own the home" /></td>
+                          <td><textarea value={row.what_counts_as_fail} onChange={(event) => updateRubricRow(row.id, { what_counts_as_fail: event.target.value })} placeholder="renter; tenant; not the owner" /></td>
+                          <td className="critical-cell"><input type="checkbox" checked={row.critical} onChange={(event) => updateRubricRow(row.id, { critical: event.target.checked })} /></td>
+                          <td><textarea value={row.common_mishears} onChange={(event) => updateRubricRow(row.id, { common_mishears: event.target.value })} placeholder="corded line -> recorded line" /></td>
+                          <td>
+                            <div className="mini-actions">
+                              <button onClick={() => duplicateRubricRow(row)}>Duplicate</button>
+                              <button onClick={() => removeRubricRow(row.id)} disabled={rubricRows.length <= 1}>Remove</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <details>
                   <summary>Advanced JSON</summary>
                   <textarea value={scorecardEditor} onChange={(event) => setScorecardEditor(event.target.value)} spellCheck={false} />
@@ -1199,6 +1468,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           <section className="panel">
             <h3>Settings</h3>
             <div className="api-key-box">
+              <label>Appearance:
+                <select value={theme} onChange={(event) => setTheme(event.target.value === "dark" ? "dark" : "light")}>
+                  <option value="light">Light mode</option>
+                  <option value="dark">Dark mode</option>
+                </select>
+              </label>
+              <p className="hint">Choose the display mode that is easiest to review in. Your preference is saved in this browser.</p>
+            </div>
+            <div className="api-key-box">
               <label>
                 OpenAI API key
                 <input type="password" value={apiKeyDraft} onChange={(event) => setApiKeyDraft(event.target.value)} placeholder="sk-..." autoComplete="off" />
@@ -1216,7 +1494,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                   {TRANSCRIPTION_MODELS.map((model) => <option key={model}>{model}</option>)}
                 </select>
               </label>
-              <label>QA model
+              <label>QA model:
                 <select value={qaModel} onChange={(event) => setQaModel(event.target.value)}>
                   {QA_MODELS.map((model) => <option key={model}>{model}</option>)}
                 </select>
@@ -1227,10 +1505,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               <p className="hint">If a selected transcription model is unavailable, CompassAi automatically falls back to {DEFAULT_TRANSCRIPTION_MODEL}. Use Test OpenAI connection to confirm the cloud QA model and API key are working.</p>
             </div>
             <div className="settings-grid">
-              <div><span>Hosting</span><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
-              <div><span>Transcription</span><strong>{transcriptionModel}</strong><p>Recordings are sent through CompassAi's same-origin Vercel relay to avoid browser fetch failures.</p></div>
-              <div><span>QA model</span><strong>{qaModel}</strong><p>If cloud QA fails, CompassAi falls back to browser rule scanning and shows a copyable error report.</p></div>
+              <div><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
+              <div><strong>{transcriptionModel}</strong><p>Used for audio transcription through CompassAi's same-origin relay.</p></div>
+              <div><strong>{qaModel}</strong><p>Used for QA grading, evidence review, and context interpretation.</p></div>
               <div><span>Cloud LLM Status</span><strong>{cloudStatus}</strong><p>{cloudCheckedAt ? `Last checked ${cloudCheckedAt}.` : "Use Test OpenAI connection for live API status."}</p></div>
+              <div><span>Appearance</span><strong>{theme === "dark" ? "Dark mode" : "Light mode"}</strong><p>Saved locally for this browser.</p></div>
             </div>
           </section>
         )}
@@ -1261,12 +1540,24 @@ function JobList({ jobs, selectedResultId, select, removeJob, mirrorLeads }: { j
       {jobs.map((job) => (
         <article key={job.job_id} className="job-card">
           <div className="job-head">
-            <strong>{job.status.toUpperCase()}</strong>
+            <div>
+              <strong>{job.status.toUpperCase()}</strong>
+              <p>{job.message}</p>
+            </div>
             <button onClick={() => removeJob(job.job_id)}>Remove</button>
           </div>
-          <progress value={job.progress} max={1} />
-          <p>{job.percent}% complete | elapsed {fmtSeconds(job.elapsed_seconds)} | {job.message}</p>
-          {(job.source_files ?? []).map((file) => <small key={file}>{file}</small>)}
+          <div className="progress-row">
+            <progress value={job.progress} max={1} />
+            <strong>{job.percent}%</strong>
+          </div>
+          <div className="job-metrics">
+            <span>Elapsed <strong>{fmtSeconds(job.elapsed_seconds)}</strong></span>
+            <span>ETA <strong>{job.status === "complete" ? "Done" : job.eta_seconds ? fmtSeconds(job.eta_seconds) : "Calculating"}</strong></span>
+            <span>Files <strong>{job.results.length}/{job.source_files?.length ?? job.results.length}</strong></span>
+          </div>
+          <div className="source-files">
+            {(job.source_files ?? []).map((file) => <small key={file}>{file}</small>)}
+          </div>
           {job.results.map((result) => (
             <button key={result.result_id} className={selectedResultId === result.result_id ? "result active" : "result"} onClick={() => select(result.result_id)}>
               {titleFor(result, mirrorLeads)}
