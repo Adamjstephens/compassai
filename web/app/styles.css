@@ -585,7 +585,7 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .review-identity { min-width: 0; }
 .review-identity h3 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1rem; }
 .review-identity p { margin: 3px 0 0; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.review-toolbar-actions { display: flex; align-items: end; gap: 8px; }
+.review-toolbar-actions { display: flex; align-items: end; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .save-state { align-self: center; color: #047857; font-size: .76rem; font-weight: 800; white-space: nowrap; }
 .save-state.dirty { color: #b45309; }
 .grade-control { display: grid; gap: 3px; color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
@@ -625,6 +625,69 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .review-footer { display: block; margin: 0; padding: 0 14px 16px; }
 .review-footer label { display: grid; gap: 6px; font-weight: 800; }
 .review-footer textarea { min-height: 110px; }
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, .72);
+  backdrop-filter: blur(5px);
+}
+.regrade-dialog {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .38);
+}
+.regrade-dialog > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.regrade-dialog h3 { margin: 2px 0 0; font-size: 1.2rem; }
+.regrade-dialog header p { margin: 5px 0 0; color: var(--muted); font-size: .88rem; line-height: 1.45; }
+.dialog-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 12%, var(--panel));
+  color: var(--brand-dark);
+}
+.dialog-body { display: grid; gap: 16px; padding: 18px; }
+.dialog-body > label { display: grid; gap: 7px; font-weight: 800; }
+.scorecard-preview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.scorecard-preview > div { min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-soft); }
+.scorecard-preview span { display: block; color: var(--muted); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.scorecard-preview strong { display: block; margin-top: 4px; overflow-wrap: break-word; }
+.regrade-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  background: color-mix(in srgb, #f59e0b 10%, var(--panel));
+  color: #92400e;
+}
+:root[data-theme="dark"] .regrade-warning { color: #fde68a; }
+.regrade-warning svg { flex: 0 0 auto; }
+.regrade-warning strong, .regrade-warning span { display: block; }
+.regrade-warning span { margin-top: 2px; font-size: .84rem; line-height: 1.45; }
+.regrade-dialog > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--panel-soft); }
+.spinning { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .screen-panel { min-height: calc(100vh - 140px); }
 .panel-title { align-items: center; }
@@ -715,6 +778,10 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .panel { padding: 14px; }
   .signout-form { position: static; margin: 14px; }
   .signout-form button { width: 100%; }
+  .dialog-backdrop { padding: 10px; }
+  .scorecard-preview { grid-template-columns: 1fr; }
+  .regrade-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; }
+  .regrade-dialog > footer button { width: 100%; }
 }
 
 /* Shared legal footer and policy pages */

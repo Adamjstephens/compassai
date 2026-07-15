@@ -91,6 +91,7 @@ type TransferAnalysis = {
 };
 type JobResult = {
   result_id: string;
+  grading_revision?: number;
   file_name: string;
   file_size_bytes?: number;
   label?: string;
@@ -136,7 +137,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.6.1";
+const APP_VERSION = "0.6.2";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -957,6 +958,18 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
 
 export function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duration = 0) {
   const { entry, client } = pickScorecard(transcript, library);
+  return makeRuleAnalysisForScorecard(transcript, entry, duration, client);
+}
+
+function clientForScorecard(transcript: string, entry: ScorecardEntry) {
+  for (const group of entry.bundle?.client_patterns ?? []) {
+    if ((group.patterns ?? []).some((pattern) => safeRegex(pattern)?.test(transcript))) return group.name;
+  }
+  return entry.bundle?.client_patterns?.[0]?.name || entry.name;
+}
+
+function makeRuleAnalysisForScorecard(transcript: string, entry: ScorecardEntry, duration = 0, forcedClient?: string) {
+  const client = forcedClient || clientForScorecard(transcript, entry);
   const rows = rulesFor(entry, client).map((rule) => {
     const row = gradeRule(rule, transcript, duration);
     if (isCriticalCategory(row.category) && row.status === "Pass") {
@@ -1427,6 +1440,68 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     }
   }
 
+  async function regradeResult(jobId: string, resultId: string, scorecardId: string) {
+    const scorecard = scorecards?.scorecards.find((entry) => entry.id === scorecardId);
+    const target = jobs.find((job) => job.job_id === jobId)?.results.find((result) => result.result_id === resultId);
+    const key = cleanApiKey(openaiApiKey);
+    if (!scorecard || !target) {
+      setError("The selected call or scorecard is no longer available.");
+      return false;
+    }
+    if (!key) {
+      setError("Save an OpenAI API key in Settings before re-grading this call.");
+      return false;
+    }
+    setBusy(true);
+    setError("");
+    setStatus(`Re-grading ${target.file_name} with ${scorecard.name}...`);
+    const started = Date.now();
+    try {
+      const ruleAnalysis = makeRuleAnalysisForScorecard(target.transcript_text, scorecard, target.duration_seconds ?? 0);
+      const qa = await qaDirect(target.transcript_text, scorecard, key, qaModel);
+      if (!Array.isArray(qa.rows) || !qa.rows.length) throw new Error("The cloud QA model returned no scorecard rows.");
+      const rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, target.transcript_text, target.duration_seconds ?? 0);
+      const localIdentity = transcriptIdentity(target.transcript_text);
+      const updated: JobResult = {
+        ...target,
+        grading_revision: (target.grading_revision ?? 0) + 1,
+        grading_seconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
+        analysis: {
+          ...target.analysis,
+          client: ruleAnalysis.client,
+          scorecard_name: scorecard.name,
+          source: `OpenAI QA re-grade via Vercel relay (${qaModel})`,
+          rows,
+          notes: qa.notes || "",
+          agent_name: titleCaseName(qa.agent_name || target.analysis.agent_name || localIdentity.agent_name),
+          customer_name: titleCaseName(qa.customer_name || target.analysis.customer_name || localIdentity.customer_name),
+          customer_phone: qa.customer_phone || target.analysis.customer_phone || localIdentity.customer_phone,
+          transfer: normalizeTransfer(qa.transfer, target.transcript_text, target.duration_seconds ?? 0),
+        },
+        qa_overrides: editorRows(rows),
+        metrics: metrics(rows),
+        llm_error_report: "",
+      };
+      const next = jobs.map((job) => job.job_id === jobId
+        ? { ...job, results: job.results.map((result) => result.result_id === resultId ? updated : result) }
+        : job);
+      persistJobs(next);
+      setStatus(`Re-graded ${target.file_name} with ${scorecard.name}. No transcription was rerun.`);
+      return true;
+    } catch (caught) {
+      setError(makeErrorReport("QA re-grade request", caught, {
+        file: target.file_name,
+        scorecard: scorecard.name,
+        model: qaModel,
+        transcript_characters: target.transcript_text.length,
+      }));
+      setStatus("Re-grade failed; the existing QA result was left unchanged.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function removeJob(jobId: string) {
     persistJobs(jobs.filter((job) => job.job_id !== jobId));
   }
@@ -1748,6 +1823,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             jobs={jobs}
             setError={setError}
             mirrorLeads={mirrorLeads}
+            scorecards={scorecards}
+            busy={busy}
+            regradeResult={regradeResult}
           />
         )}
         {view === "scorecards" && (
@@ -2048,6 +2126,9 @@ function ReviewPanel({
   persistJobs,
   setError,
   mirrorLeads,
+  scorecards,
+  busy,
+  regradeResult,
 }: {
   item?: { job: Job; result: JobResult };
   allResults: { job: Job; result: JobResult }[];
@@ -2057,6 +2138,9 @@ function ReviewPanel({
   persistJobs: (jobs: Job[]) => void;
   setError: (message: string) => void;
   mirrorLeads: MirrorLead[];
+  scorecards: ScorecardLibrary | null;
+  busy: boolean;
+  regradeResult: (jobId: string, resultId: string, scorecardId: string) => Promise<boolean>;
 }) {
   const [rows, setRows] = useState<EditorRow[]>([]);
   const [finalGrade, setFinalGrade] = useState("Approved");
@@ -2065,6 +2149,8 @@ function ReviewPanel({
   const [active, setActive] = useState(0);
   const [mobileTab, setMobileTab] = useState<"checks" | "transcript">("checks");
   const [savedAt, setSavedAt] = useState("");
+  const [regradeOpen, setRegradeOpen] = useState(false);
+  const [regradeScorecardId, setRegradeScorecardId] = useState("");
 
   useEffect(() => {
     setRows(item?.result.qa_overrides ?? []);
@@ -2074,7 +2160,16 @@ function ReviewPanel({
     setActive(0);
     setMobileTab("checks");
     setSavedAt("");
-  }, [item?.result.result_id]);
+    setRegradeOpen(false);
+    const matchingScorecard = scorecards?.scorecards.find((entry) => entry.name === item?.result.analysis.scorecard_name);
+    setRegradeScorecardId(matchingScorecard?.id || scorecards?.active_scorecard_id || scorecards?.scorecards[0]?.id || "");
+  }, [item?.result.result_id, item?.result.grading_revision]);
+
+  useEffect(() => {
+    if (regradeScorecardId || !scorecards?.scorecards.length) return;
+    const matchingScorecard = scorecards.scorecards.find((entry) => entry.name === item?.result.analysis.scorecard_name);
+    setRegradeScorecardId(matchingScorecard?.id || scorecards.active_scorecard_id || scorecards.scorecards[0].id);
+  }, [item?.result.analysis.scorecard_name, regradeScorecardId, scorecards]);
 
   const matches = useMemo(() => {
     if (!item || !search.trim()) return [] as number[];
@@ -2125,6 +2220,10 @@ function ReviewPanel({
   if (!item) return <section className="panel"><h3>QA review</h3><p>No completed calls yet.</p></section>;
   const result = item.result;
   const meta = callMeta(result, mirrorLeads);
+  const regradeScorecard = scorecards?.scorecards.find((entry) => entry.id === regradeScorecardId);
+  const regradeClient = regradeScorecard ? clientForScorecard(result.transcript_text, regradeScorecard) : "";
+  const regradeRules = regradeScorecard ? rulesFor(regradeScorecard, regradeClient) : [];
+  const regradeCriticalCount = regradeRules.filter((row) => isCriticalCategory(row.type || "")).length;
   const criticalIssues = rows.filter((row) => isCriticalCategory(row.Category) && row["Final status"] !== "Pass");
   const selectedIndex = Math.max(0, allResults.findIndex(({ result: candidate }) => candidate.result_id === result.result_id));
   const previous = allResults[selectedIndex - 1]?.result;
@@ -2160,6 +2259,7 @@ function ReviewPanel({
           <div className="review-toolbar-actions">
             <span className={`save-state ${dirty ? "dirty" : ""}`}>{dirty ? "Unsaved changes" : savedAt ? `Saved ${savedAt}` : "All changes saved"}</span>
             <label className="grade-control">Final grade<select value={finalGrade} onChange={(event) => setFinalGrade(event.target.value)}>{["Approved", "Needs coaching", "Reject / no credit", "Needs second review"].map((grade) => <option key={grade}>{grade}</option>)}</select></label>
+            <button data-testid="open-regrade" onClick={() => setRegradeOpen(true)} disabled={busy || !scorecards?.scorecards.length}><RefreshCw size={16} /> Re-grade</button>
             <button onClick={reset} disabled={!dirty}>Reset</button>
             <button className="primary" data-testid="save-qa-overrides" onClick={save} disabled={!dirty}>Save overrides</button>
           </div>
@@ -2209,6 +2309,21 @@ function ReviewPanel({
         </div>
         <div className="review-footer"><label>Overall reviewer note<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Coaching notes, override reasoning, or follow-up needed..." /></label></div>
       </div>
+      {regradeOpen && <div className="dialog-backdrop">
+        <section className="regrade-dialog" role="dialog" aria-modal="true" aria-labelledby="regrade-title">
+          <header>
+            <div className="dialog-icon"><RefreshCw size={20} /></div>
+            <div><span className="eyebrow">Re-run cloud QA</span><h3 id="regrade-title">Re-grade this call</h3><p>The saved transcript will be graded again without retranscribing the recording.</p></div>
+            <button className="icon-button" aria-label="Close re-grade dialog" onClick={() => setRegradeOpen(false)} disabled={busy}><X size={18} /></button>
+          </header>
+          <div className="dialog-body">
+            <label>Choose scorecard<select data-testid="regrade-scorecard" value={regradeScorecardId} onChange={(event) => setRegradeScorecardId(event.target.value)}>{scorecards?.scorecards.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
+            {regradeScorecard && <div className="scorecard-preview"><div><span>Client rules</span><strong>{regradeClient || regradeScorecard.name}</strong></div><div><span>QA criteria</span><strong>{regradeRules.length}</strong></div><div><span>Critical checks</span><strong>{regradeCriticalCount}</strong></div></div>}
+            <div className="regrade-warning"><TriangleAlert size={18} /><div><strong>Current grading will be replaced</strong><span>Automated decisions, evidence, reviewer overrides, and the final grade will be reset using the selected scorecard. The transcript and call details will remain unchanged.</span></div></div>
+          </div>
+          <footer><button onClick={() => setRegradeOpen(false)} disabled={busy}>Cancel</button><button className="primary" data-testid="confirm-regrade" disabled={busy || !regradeScorecardId} onClick={async () => { if (await regradeResult(item.job.job_id, result.result_id, regradeScorecardId)) setRegradeOpen(false); }}>{busy ? <><RefreshCw className="spinning" size={16} /> Re-grading...</> : <><RefreshCw size={16} /> Re-grade transcript</>}</button></footer>
+        </section>
+      </div>}
     </section>
   );
 }
