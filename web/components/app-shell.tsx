@@ -92,6 +92,7 @@ type TransferAnalysis = {
 type JobResult = {
   result_id: string;
   file_name: string;
+  file_size_bytes?: number;
   label?: string;
   transcript_text: string;
   analysis: {
@@ -135,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.3";
+const APP_VERSION = "0.5.4";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -158,6 +159,33 @@ function escapeHtml(value: unknown) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function fileSignature(name: string, size: number) {
+  return `${name.trim().toLowerCase()}::${size}`;
+}
+
+export function splitDuplicateFiles<T extends { name: string; size: number }>(
+  selected: T[],
+  completed: Array<{ file_name: string; file_size_bytes?: number }>,
+) {
+  const signatures = new Set(
+    completed
+      .filter((result) => Number.isFinite(result.file_size_bytes))
+      .map((result) => fileSignature(result.file_name, Number(result.file_size_bytes))),
+  );
+  const unique: T[] = [];
+  const duplicates: T[] = [];
+  selected.forEach((file) => {
+    const signature = fileSignature(file.name, file.size);
+    if (signatures.has(signature)) {
+      duplicates.push(file);
+      return;
+    }
+    signatures.add(signature);
+    unique.push(file);
+  });
+  return { unique, duplicates };
 }
 
 function cleanApiKey(value = "") {
@@ -1164,6 +1192,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       setError("Paste and save your OpenAI API key before processing calls.");
       return;
     }
+    const { unique: selectedFiles, duplicates: duplicateFiles } = splitDuplicateFiles(
+      Array.from(files),
+      jobs.flatMap((job) => job.results),
+    );
+    if (!selectedFiles.length) {
+      setStatus(`Skipped ${duplicateFiles.length} duplicate file${duplicateFiles.length === 1 ? "" : "s"}. Nothing new was sent to OpenAI.`);
+      setError("");
+      return;
+    }
     setBusy(true);
     setError("");
     const job: Job = {
@@ -1174,14 +1211,14 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       percent: 2,
       elapsed_seconds: 0,
       eta_seconds: undefined,
-      source_files: Array.from(files).map((file) => file.name),
+      source_files: selectedFiles.map((file) => file.name),
       results: [],
     };
     let nextJobs = [job, ...jobs];
     persistJobs(nextJobs);
     const started = Date.now();
     try {
-      for (const [index, file] of Array.from(files).entries()) {
+      for (const [index, file] of selectedFiles.entries()) {
         const update = (patch: Partial<Job>) => {
           const elapsed = Math.round((Date.now() - started) / 1000);
           const nextProgress = Math.max(0.01, Math.min(1, patch.progress ?? nextJobs.find((candidate) => candidate.job_id === job.job_id)?.progress ?? 0.01));
@@ -1194,9 +1231,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           persistJobs(nextJobs);
         };
         update({
-          message: `Transcribing ${file.name} (${index + 1} of ${files.length})...`,
-          progress: index / files.length + 0.05,
-          percent: Math.max(2, Math.round((index / files.length) * 100)),
+          message: `Transcribing ${file.name} (${index + 1} of ${selectedFiles.length})...`,
+          progress: index / selectedFiles.length + 0.05,
+          percent: Math.max(2, Math.round((index / selectedFiles.length) * 100)),
         });
         const transcriptPayload = await transcribeDirect(file, cleanApiKey(openaiApiKey), transcriptionModel);
         const gradingStarted = Date.now();
@@ -1212,9 +1249,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         let report = "";
         try {
           update({
-            message: `Running QA review for ${file.name} (${index + 1} of ${files.length})...`,
-            progress: (index + 0.65) / files.length,
-            percent: Math.round(((index + 0.65) / files.length) * 100),
+            message: `Running QA review for ${file.name} (${index + 1} of ${selectedFiles.length})...`,
+            progress: (index + 0.65) / selectedFiles.length,
+            percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
           });
           const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
           qaIdentity = {
@@ -1239,6 +1276,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         const result: JobResult = {
           result_id: uuid(),
           file_name: file.name,
+          file_size_bytes: file.size,
           transcript_text: transcriptPayload.transcript,
           duration_seconds: transcriptPayload.duration,
           grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
@@ -1261,9 +1299,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             ? {
                 ...candidate,
                 results: [...candidate.results, result],
-                message: `Finished ${index + 1} of ${files.length} recording(s).`,
-                progress: (index + 1) / files.length,
-                percent: Math.round(((index + 1) / files.length) * 100),
+                message: `Finished ${index + 1} of ${selectedFiles.length} recording(s).`,
+                progress: (index + 1) / selectedFiles.length,
+                percent: Math.round(((index + 1) / selectedFiles.length) * 100),
               }
             : candidate,
         );
@@ -1271,13 +1309,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       }
       nextJobs = nextJobs.map((candidate) =>
         candidate.job_id === job.job_id
-          ? { ...candidate, status: "complete", message: `Completed ${files.length} file(s).`, progress: 1, percent: 100, eta_seconds: 0 }
+          ? { ...candidate, status: "complete", message: `Completed ${selectedFiles.length} file(s)${duplicateFiles.length ? `; skipped ${duplicateFiles.length} duplicate(s)` : ""}.`, progress: 1, percent: 100, eta_seconds: 0 }
           : candidate,
       );
       persistJobs(nextJobs);
-      setStatus(`Completed ${files.length} file(s).`);
+      setStatus(`Completed ${selectedFiles.length} file(s)${duplicateFiles.length ? ` and skipped ${duplicateFiles.length} duplicate(s)` : ""}.`);
     } catch (caught) {
-      const report = makeErrorReport("Cloud transcription relay workflow", caught, { files: Array.from(files).map((file) => file.name).join(", ") });
+      const report = makeErrorReport("Cloud transcription relay workflow", caught, { files: selectedFiles.map((file) => file.name).join(", ") });
       nextJobs = nextJobs.map((candidate) =>
         candidate.job_id === job.job_id ? { ...candidate, status: "failed", message: "Processing failed.", progress: 1, percent: 100, error_report: report } : candidate,
       );
