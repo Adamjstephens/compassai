@@ -22,7 +22,9 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  TriangleAlert,
   Trash2,
+  ArrowRightLeft,
   Upload,
   Users,
   X,
@@ -80,6 +82,13 @@ type AnalysisRow = {
   result: string;
   evidence_time: string;
 };
+type TransferAnalysis = {
+  occurred: boolean;
+  status: string;
+  time: string;
+  snippet: string;
+  notes: string;
+};
 type JobResult = {
   result_id: string;
   file_name: string;
@@ -94,6 +103,7 @@ type JobResult = {
     agent_name?: string;
     customer_name?: string;
     customer_phone?: string;
+    transfer?: TransferAnalysis;
   };
   qa_overrides?: EditorRow[];
   metrics?: { qa_score: number; passed_count: number; total_count: number; outcome: string; final_grade: string };
@@ -124,7 +134,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.1";
+const APP_VERSION = "0.5.2";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -278,6 +288,42 @@ function freeAlerts(text: string) {
   if (/\bfree\s+windows?\b/i.test(text)) alerts.push("FREE WINDOW CUSTOMER");
   if (/\bfree\s+(roofing|roof)\b/i.test(text)) alerts.push("FREE ROOFING CUSTOMER");
   return alerts;
+}
+
+function timestampSeconds(value = "") {
+  const parts = value.trim().split(":").map(Number);
+  if ((parts.length !== 2 && parts.length !== 3) || parts.some((part) => !Number.isFinite(part) || part < 0)) return null;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function normalizeTransfer(raw: unknown, transcript: string, duration = 0): TransferAnalysis {
+  if (!raw || typeof raw !== "object") {
+    return { occurred: false, status: "No transfer detected", time: "", snippet: "", notes: "" };
+  }
+  const value = raw as Partial<TransferAnalysis>;
+  const occurred = value.occurred === true;
+  const snippet = String(value.snippet || "").replace(/\s+/g, " ").trim();
+  const suppliedTime = String(value.time || "").trim();
+  const time = occurred && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(suppliedTime)
+    ? suppliedTime
+    : occurred && snippet
+      ? timeForSnippet(transcript, snippet, duration)
+      : "";
+  return {
+    occurred,
+    status: occurred ? `Transfer detected${time ? ` at ${time}` : ""}` : "No transfer detected",
+    time,
+    snippet,
+    notes: String(value.notes || "").replace(/\s+/g, " ").trim(),
+  };
+}
+
+function isPostTransfer(evidenceTime: string, transfer?: TransferAnalysis) {
+  if (!transfer?.occurred) return false;
+  const evidence = timestampSeconds(evidenceTime);
+  const transferAt = timestampSeconds(transfer.time);
+  return evidence !== null && transferAt !== null && evidence > transferAt;
 }
 
 function safeRegex(pattern: string) {
@@ -770,7 +816,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,rows:[{check,status,result,evidence_time,category}],notes}. Identify agent/customer from transcript context when clear, such as greetings and introductions. status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
+            "You are a QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include the best MM:SS timestamp, exact short evidence snippet, and a concise explanation. status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
         },
         {
           role: "user",
@@ -792,6 +838,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
     agent_name?: string;
     customer_name?: string;
     customer_phone?: string;
+    transfer?: Partial<TransferAnalysis>;
   };
 }
 
@@ -839,12 +886,13 @@ function parseMirrorText(value: string): MirrorLead[] {
   return clover.map((url, index) => ({ id: `${index}-${url}`, clover_url: url, label: `MirrorCXT lead ${index + 1}` }));
 }
 
-function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
+export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
   const generated = new Date().toLocaleString();
-  const rows = results
+  const reviewRows = results
     .map((result) => {
       const m = result.metrics;
       const meta = callMeta(result, mirrorLeads);
+      const transfer = result.analysis.transfer;
       return `<tr>
         <td class="long">${escapeHtml(result.file_name)}</td>
         <td>${escapeHtml(result.analysis.client)}</td>
@@ -855,40 +903,72 @@ function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
         <td>${meta.clover ? `<a href="${escapeHtml(meta.clover)}">Open Clover</a>` : "Not matched"}</td>
         <td>${m?.qa_score ?? 0}%</td>
         <td>${escapeHtml(m?.outcome)}</td>
+        <td>${escapeHtml(transfer?.status || "No transfer detected")}</td>
         <td>${escapeHtml(fmtSeconds(result.duration_seconds))}</td>
         <td>${escapeHtml(fmtSeconds(result.grading_seconds))}</td>
       </tr>`;
     })
     .join("");
-  const transcriptSections = results
-    .map(
-      (result, index) => {
-        const meta = callMeta(result, mirrorLeads);
-        return `<section class="call"><h2>${escapeHtml(titleFor(result, mirrorLeads))}</h2>
+  const grouped = new Map<string, JobResult[]>();
+  results.forEach((result) => {
+    const agent = callMeta(result, mirrorLeads).agent || "Unassigned agent";
+    grouped.set(agent, [...(grouped.get(agent) ?? []), result]);
+  });
+  let transcriptIndex = 0;
+  const agentSections = Array.from(grouped.entries()).map(([agent, calls]) => {
+    const average = calls.length
+      ? Math.round(calls.reduce((sum, call) => sum + (call.metrics?.qa_score ?? 0), 0) / calls.length)
+      : 0;
+    const transferCount = calls.filter((call) => call.analysis.transfer?.occurred).length;
+    const callSections = calls.map((result) => {
+      const index = transcriptIndex++;
+      const meta = callMeta(result, mirrorLeads);
+      const transfer = result.analysis.transfer;
+      const evidenceRows = (result.qa_overrides ?? editorRows(result.analysis.rows ?? [])).map((row) => {
+        const postTransfer = isPostTransfer(row.Time, transfer);
+        return `<tr>
+          <td class="qualifier-cell"><strong>${escapeHtml(row.Qualifier)}</strong><small>${escapeHtml(row.Category)}</small></td>
+          <td>${escapeHtml(row["System status"])}</td>
+          <td>${escapeHtml(row["Final status"])}</td>
+          <td class="time-cell">${escapeHtml(row.Time || "No timestamp")}${postTransfer ? '<span class="post-transfer">&#9888; Post-Transfer</span>' : ""}</td>
+          <td class="long">${escapeHtml(row.Evidence)}</td>
+          <td class="long">${escapeHtml(row["Reviewer note"])}</td>
+        </tr>`;
+      }).join("");
+      const transferAlert = transfer?.occurred
+        ? `<div class="transfer-alert"><strong>Transfer detected${transfer.time ? ` at ${escapeHtml(transfer.time)}` : ""}</strong><span>${escapeHtml(transfer.snippet || transfer.notes || "The AI identified a call handoff.")}</span></div>`
+        : "";
+      return `<article class="call-report">
+        <header class="call-header"><span>Individual call report</span><h3>${escapeHtml(titleFor(result, mirrorLeads))}</h3></header>
         <div class="call-meta">
           <span>Agent: <strong>${escapeHtml(meta.agent || "Not detected")}</strong></span>
           <span>Customer: <strong>${escapeHtml(meta.customer || "Not matched")}</strong></span>
           <span>Phone: <strong>${escapeHtml(meta.phone ? formatPhone(meta.phone) : "Not matched")}</strong></span>
+          <span>QA score: <strong>${result.metrics?.qa_score ?? 0}%</strong></span>
+          <span>Outcome: <strong>${escapeHtml(result.metrics?.outcome || "Needs review")}</strong></span>
+          <span>Call time: <strong>${escapeHtml(fmtSeconds(result.duration_seconds))}</strong></span>
+          <span>Grading time: <strong>${escapeHtml(fmtSeconds(result.grading_seconds))}</strong></span>
           ${meta.clover ? `<span>Clover: <a href="${escapeHtml(meta.clover)}">Open matched lead</a></span>` : ""}
         </div>
-        ${freeAlerts(result.transcript_text)
-        .map((alert) => `<div class="free-alert">${escapeHtml(alert)}</div>`)
-        .join("")}<div class="search-row"><input class="search" data-target="t${index}" placeholder="Search this transcript"><button type="button" data-prev="t${index}">Previous</button><button type="button" data-next="t${index}">Next</button><span data-count="t${index}">0 matches</span></div><pre class="transcript" id="t${index}">${escapeHtml(result.transcript_text)}</pre></section>`;
-      },
-    )
-    .join("");
-  const evidence = results
-    .flatMap((result) => (result.qa_overrides ?? []).map((row) => ({ result, row })))
-    .map(({ result, row }) => `<tr><td class="long">${escapeHtml(result.file_name)}</td><td>${escapeHtml(row.Qualifier)}</td><td>${escapeHtml(row["Final status"])}</td><td>${escapeHtml(row.Time || "No timestamp")}</td><td class="long">${escapeHtml(row.Evidence)}</td><td class="long">${escapeHtml(row["Reviewer note"])}</td></tr>`)
-    .join("");
+        ${transferAlert}
+        ${freeAlerts(result.transcript_text).map((alert) => `<div class="free-alert">${escapeHtml(alert)}</div>`).join("")}
+        <h4>QA assessment and evidence</h4>
+        <div class="table-wrap"><table class="qa-table"><thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Evidence time</th><th>Evidence</th><th>Reviewer note</th></tr></thead><tbody>${evidenceRows || '<tr><td colspan="6">No QA evidence recorded for this call.</td></tr>'}</tbody></table></div>
+        <h4>Transcript</h4>
+        <div class="search-row"><input class="search" data-target="t${index}" placeholder="Search this transcript"><button type="button" data-prev="t${index}">Previous</button><button type="button" data-next="t${index}">Next</button><span data-count="t${index}">0 matches</span></div>
+        <pre class="transcript" id="t${index}">${escapeHtml(result.transcript_text)}</pre>
+      </article>`;
+    }).join("");
+    return `<details class="agent-section" open><summary><span>Agent</span><strong>${escapeHtml(agent)}</strong><em>${calls.length} call${calls.length === 1 ? "" : "s"} · ${average}% average QA · ${transferCount} transfer${transferCount === 1 ? "" : "s"}</em></summary>${callSections}</details>`;
+  }).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>CompassAi Report</title><style>
-	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:14px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:10px;padding:14px}.card span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:10px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.call{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:16px;margin:16px 0}.call h2{margin-top:0}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:10px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call{break-inside:avoid}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
+	body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.45}.page{padding:28px;max-width:1800px;margin:auto}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:10px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #d8dee6;border-radius:8px;padding:14px}.card span,.call-header span{color:#687789;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}h2{margin:24px 0 10px}h4{margin:20px 0 8px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:8px;background:#fff}table{border-collapse:collapse;min-width:1500px;width:max-content;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}th{background:#f8fafc;font-size:12px;text-transform:uppercase;color:#475569}.long{white-space:normal;min-width:260px;max-width:560px;overflow-wrap:break-word}.qualifier-cell{white-space:normal;min-width:220px;max-width:320px}.qualifier-cell small{display:block;color:#64748b}.time-cell{min-width:145px}.post-transfer{display:block;width:max-content;margin-top:5px;border:1px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:4px;padding:3px 6px;font-size:11px;font-weight:900}.agent-section{background:#fff;border:1px solid #b9c5d3;border-radius:8px;margin:20px 0;padding:0 16px 16px}.agent-section>summary{cursor:pointer;padding:16px 0;display:flex;align-items:center;gap:12px}.agent-section>summary span{font-size:12px;color:#64748b;text-transform:uppercase;font-weight:800}.agent-section>summary strong{font-size:20px}.agent-section>summary em{margin-left:auto;color:#64748b;font-style:normal}.call-report{border-top:3px solid #0f766e;padding:18px 0 6px;margin:10px 0 22px}.call-header h3{margin:4px 0 12px;font-size:18px;overflow-wrap:break-word;word-break:normal}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:12px}.transfer-alert{border:2px solid #2563eb;background:#dbeafe;color:#1e3a8a;border-radius:8px;padding:11px 13px;font-weight:700;margin:10px 0}.transfer-alert strong,.transfer-alert span{display:block}.transfer-alert span{font-weight:500;margin-top:3px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.free-alert{border:2px solid #dc2626;background:#fee2e2;color:#991b1b;border-radius:8px;padding:10px;font-weight:900;margin:10px 0}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827;border-radius:3px;padding:0 2px}mark.active{background:#fb923c}@media(max-width:720px){.page{padding:12px}.agent-section>summary{align-items:flex-start;flex-wrap:wrap}.agent-section>summary em{width:100%;margin-left:0}.search-row{grid-template-columns:1fr 1fr}.search-row input,.search-row span{grid-column:1/-1}}@media print{body{background:#fff}.page{padding:12px}.hero,.card,.call-report{break-inside:avoid}.agent-section{border:0;padding:0}.table-wrap{overflow:visible}table{font-size:10px;min-width:1100px}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page">
 	<div class="hero"><h1>CompassAi Batch Report</h1><p>Generated ${escapeHtml(generated)}. Polished web report with MirrorCXT matches, QA evidence, timestamps, and searchable transcripts.</p></div>
 	<div class="summary"><div class="card"><span>Calls</span><strong>${results.length}</strong></div><div class="card"><span>Total call time</span><strong>${escapeHtml(fmtSeconds(results.reduce((sum, result) => sum + (result.duration_seconds ?? 0), 0)))}</strong></div><div class="card"><span>MirrorCXT leads loaded</span><strong>${mirrorLeads.length}</strong></div><div class="card"><span>Average QA score</span><strong>${results.length ? Math.round(results.reduce((sum, result) => sum + (result.metrics?.qa_score ?? 0), 0) / results.length) : 0}%</strong></div></div>
-		<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Call Time</th><th>Grading Time</th></tr></thead><tbody>${rows}</tbody></table></div>
-	<h2>QA Evidence</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Qualifier</th><th>Status</th><th>Time</th><th>Evidence</th><th>Reviewer Note</th></tr></thead><tbody>${evidence}</tbody></table></div>
+	<h2>Review Queue</h2><div class="table-wrap"><table><thead><tr><th>File</th><th>Client</th><th>Scorecard</th><th>Agent</th><th>Customer</th><th>Phone</th><th>Clover</th><th>QA Score</th><th>Outcome</th><th>Transfer</th><th>Call Time</th><th>Grading Time</th></tr></thead><tbody>${reviewRows}</tbody></table></div>
+	<h2>QA Reviews by Agent</h2>${agentSections || "<p>No completed calls were selected for this report.</p>"}
 	<h2>MirrorCXT Links</h2><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Disposition</th><th>Clover</th><th>Raw label</th></tr></thead><tbody>${mirrorLeads.map((lead) => `<tr><td>${escapeHtml(lead.customer || "")}</td><td>${escapeHtml(lead.phone ? formatPhone(lead.phone) : "")}</td><td>${escapeHtml(lead.disposition || "")}</td><td>${lead.clover_url ? `<a href="${escapeHtml(lead.clover_url)}">Open Clover</a>` : ""}</td><td class="long">${escapeHtml(lead.label)}</td></tr>`).join("")}</tbody></table></div>
-	${transcriptSections}</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id);var s=state[id];if(!t||!s)return;var count=document.querySelector('[data-count="'+id+'"]');if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&'),'gi');var i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i);i++;return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches';}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next');var input=document.querySelector('[data-target="'+id+'"]');var s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
+	</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id);var s=state[id];if(!t||!s)return;var count=document.querySelector('[data-count="'+id+'"]');if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&'),'gi');var i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i);i++;return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches';}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next');var input=document.querySelector('[data-target="'+id+'"]');var s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
 }
 
 export function CompassAiShell({ userEmail }: { userEmail: string }) {
@@ -1092,6 +1172,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
         const localIdentity = transcriptIdentity(transcriptPayload.transcript);
         let qaIdentity = { ...localIdentity };
+        let transfer = normalizeTransfer(undefined, transcriptPayload.transcript, transcriptPayload.duration);
         let rows = ruleAnalysis.rows;
         let source = transcriptPayload.chunked
           ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
@@ -1110,6 +1191,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
             customer_phone: qa.customer_phone || localIdentity.customer_phone,
           };
+          transfer = normalizeTransfer(qa.transfer, transcriptPayload.transcript, transcriptPayload.duration);
           if (Array.isArray(qa.rows) && qa.rows.length) {
             rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
             source = transcriptPayload.chunked
@@ -1137,6 +1219,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             agent_name: qaIdentity.agent_name,
             customer_name: qaIdentity.customer_name,
             customer_phone: qaIdentity.customer_phone,
+            transfer,
           },
           qa_overrides: editorRows(rows),
           metrics: metrics(rows),
@@ -1931,7 +2014,7 @@ function ReviewPanel({
                     <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
                     <td><span className="pill">{row["System status"]}</span></td>
                     <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{["Pass", "Fail", "Needs review", "Not applicable"].map((status) => <option key={status}>{status}</option>)}</select></td>
-                    <td><input value={row.Time} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Time: event.target.value } : r))} /></td>
+                    <td><div className="evidence-time"><input value={row.Time} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Time: event.target.value } : r))} />{isPostTransfer(row.Time, result.analysis.transfer) && <span className="post-transfer-badge"><TriangleAlert size={13} /> Post-Transfer</span>}</div></td>
                     <td><textarea value={row.Evidence} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Evidence: event.target.value } : r))} /></td>
                     <td><textarea value={row["Reviewer note"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Reviewer note": event.target.value } : r))} /></td>
                   </tr>
@@ -1942,6 +2025,7 @@ function ReviewPanel({
           <section className={`transcript-panel ${mobileTab === "transcript" ? "mobile-active" : ""}`}>
             <div className="pane-heading transcript-heading"><div><h4>Transcript</h4><p>{fmtSeconds(result.duration_seconds)} call time</p></div></div>
             <div className="searchbar"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transcript" /><button disabled={!matches.length} onClick={() => setActive((active + matches.length - 1) % matches.length)}>Previous</button><button disabled={!matches.length} onClick={() => setActive((active + 1) % matches.length)}>Next</button><span>{matches.length ? `${active + 1}/${matches.length}` : "0 matches"}</span></div>
+            {result.analysis.transfer?.occurred && <div className="transfer-alert"><ArrowRightLeft size={18} /><div><strong>{result.analysis.transfer.status}</strong><span>{result.analysis.transfer.snippet || result.analysis.transfer.notes || "The AI identified a call handoff."}</span></div></div>}
             {freeAlerts(result.transcript_text).map((alert) => <div className="free-alert" key={alert}>{alert}</div>)}
             <pre>{highlight(result.transcript_text, search, active)}</pre>
           </section>

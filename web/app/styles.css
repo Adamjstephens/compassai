@@ -381,6 +381,35 @@ td textarea { min-height: 92px; }
   font-weight: 900;
   margin-bottom: 10px;
 }
+.transfer-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 2px solid #2563eb;
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.transfer-alert svg { flex: 0 0 auto; margin-top: 1px; }
+.transfer-alert strong, .transfer-alert span { display: block; }
+.transfer-alert span { margin-top: 2px; font-size: .84rem; }
+.evidence-time { display: grid; gap: 6px; min-width: 116px; }
+.post-transfer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  border: 1px solid var(--danger);
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 5px;
+  padding: 3px 5px;
+  font-size: .68rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
 pre {
   background: #05080d;
   color: #e5e7eb;
