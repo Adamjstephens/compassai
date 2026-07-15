@@ -156,7 +156,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.1.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -1220,6 +1220,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("qa");
+  const [modeTransition, setModeTransition] = useState<AnalysisMode | null>(null);
   const [editingScorecardId, setEditingScorecardId] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1227,6 +1228,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
   const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const modeTransitionTimerRef = useRef<number | null>(null);
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
   const selected = results.find((item) => item.result.result_id === selectedResultId) ?? results[0];
@@ -1333,6 +1335,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE, theme);
   }, [theme]);
+
+  useEffect(() => () => {
+    if (modeTransitionTimerRef.current !== null) window.clearTimeout(modeTransitionTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1857,6 +1863,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   }
 
   function changeAnalysisMode(nextMode: AnalysisMode) {
+    if (nextMode === analysisMode) return;
+    if (modeTransitionTimerRef.current !== null) window.clearTimeout(modeTransitionTimerRef.current);
+    setModeTransition(nextMode);
     setAnalysisMode(nextMode);
     window.localStorage.setItem(ANALYSIS_MODE_STORAGE, nextMode);
     setReportHtml("");
@@ -1865,6 +1874,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setStatus(nextMode === "qa"
       ? "QA Mode active. Booked calls use client-specific scorecards."
       : "Missed Opportunities Mode active. Non-booked calls use universal opportunity analysis.");
+    modeTransitionTimerRef.current = window.setTimeout(() => {
+      setModeTransition(null);
+      modeTransitionTimerRef.current = null;
+    }, 720);
   }
 
   function saveOpenAiKey() {
@@ -1972,7 +1985,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-analysis-mode={analysisMode} data-mode-transition={modeTransition ? "active" : "idle"}>
+      {modeTransition && (
+        <div className="mode-transition-toast" role="status" aria-live="polite">
+          <span className="mode-transition-icon">{modeTransition === "qa" ? <ClipboardCheck size={20} /> : <Target size={20} />}</span>
+          <span><small>Workspace changed</small><strong>{modeTransition === "qa" ? "Scorecard QA" : "Missed Opportunities"}</strong></span>
+        </div>
+      )}
       {sidebarOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       <aside className={`app-sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand">
@@ -2020,12 +2039,17 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           </div>
           <div className="topbar-controls">
             <div className="mode-switch" role="group" aria-label="Analysis mode">
-              <button data-testid="mode-qa" className={analysisMode === "qa" ? "active" : ""} onClick={() => changeAnalysisMode("qa")} disabled={busy}><ClipboardCheck size={16} /> QA</button>
-              <button data-testid="mode-opportunities" className={analysisMode === "missed_opportunities" ? "active" : ""} onClick={() => changeAnalysisMode("missed_opportunities")} disabled={busy}><Target size={16} /> Missed Opportunities</button>
+              <button data-testid="mode-qa" className={analysisMode === "qa" ? "active" : ""} onClick={() => changeAnalysisMode("qa")} disabled={busy} aria-pressed={analysisMode === "qa"}><ClipboardCheck size={16} /><span><strong>QA</strong><small>Scorecards</small></span></button>
+              <button data-testid="mode-opportunities" className={analysisMode === "missed_opportunities" ? "active" : ""} onClick={() => changeAnalysisMode("missed_opportunities")} disabled={busy} aria-pressed={analysisMode === "missed_opportunities"}><Target size={16} /><span><strong>Opportunities</strong><small>Sales coaching</small></span></button>
             </div>
             <button className="topbar-action" onClick={refresh} disabled={busy}><RefreshCw size={16} /> Refresh</button>
           </div>
         </header>
+        <div className="mode-context" role="note">
+          <span className="mode-context-icon">{analysisMode === "qa" ? <ShieldCheck size={18} /> : <Target size={18} />}</span>
+          <div><strong>{analysisMode === "qa" ? "Scorecard QA mode" : "Missed Opportunities mode"}</strong><span>{analysisMode === "qa" ? "Client-specific compliance grading and evidence review" : "Non-booked call recovery and coaching analysis"}</span></div>
+          <span className="mode-context-state"><i /> {analysisMode === "qa" ? "QA active" : "Coaching active"}</span>
+        </div>
         {status && <div className="notice status-notice" role="status"><CheckCircle2 size={17} /><span>{status}</span></div>}
         {error && <div className="notice error">{error}</div>}
         {view === "jobs" && (
