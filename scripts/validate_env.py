@@ -14,8 +14,6 @@ WEB_REQUIRED = [
     "AUTH_MICROSOFT_ENTRA_ID_SECRET",
     "AUTH_MICROSOFT_ENTRA_ID_ISSUER",
     "ALLOWED_EMAIL_DOMAINS",
-    "COMPASSAI_API_URL",
-    "COMPASSAI_JWT_SECRET",
 ]
 
 API_REQUIRED = [
@@ -69,8 +67,6 @@ def validate(target: str, values: dict[str, str]) -> list[str]:
         issuer = values.get("AUTH_MICROSOFT_ENTRA_ID_ISSUER", "")
         if issuer and not re.match(r"^https://login\.microsoftonline\.com/.+/v2\.0/?$", issuer):
             errors.append("AUTH_MICROSOFT_ENTRA_ID_ISSUER should look like https://login.microsoftonline.com/<tenant-id>/v2.0")
-        if values.get("COMPASSAI_JWT_SECRET") == values.get("AUTH_SECRET"):
-            errors.append("COMPASSAI_JWT_SECRET should be different from AUTH_SECRET.")
 
     if target == "api":
         database_url = values.get("DATABASE_URL", "")

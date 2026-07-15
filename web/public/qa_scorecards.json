@@ -1,0 +1,3064 @@
+{
+  "version": 2,
+  "active_scorecard_id": "friendly-csv-scorecard-6c6b827e4a2e",
+  "scorecards": [
+    {
+      "id": "friendly-csv-scorecard-cb79608ca428",
+      "name": "RbA/QWD",
+      "source_name": "QWDscorecardv4.csv",
+      "saved_at": "2026-06-20 09:55:02",
+      "bundle": {
+        "version": 1,
+        "name": "RbA/QWD",
+        "client_patterns": [
+          {
+            "name": "QWD",
+            "patterns": [
+              "\\bQWD\\b",
+              "\\bRbA\\b",
+              "\\bRenewal\\s+by\\s+anderson\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "QWD": {
+            "clients": [
+              "QWD"
+            ],
+            "rules": [
+              {
+                "name": "Home Type Approved",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bNot:\\s+:\\s+Single\\-family\\s+/\\s+townhouse\\s+/\\s+condo\\s+\\(3rd\\s+floor\\s+or\\s+lower\\)\\s+—\\s+Mobile/Manufactured\\s+Homes\\s+Book\\s+if\\s+on\\s+permanent\\s+solid\\s+foundation\\s+and\\s+has\\s+2x4\\s+Framing\\s+or:\\s+Sheds,\\s+Trailers,\\s+RV\\b"
+                ],
+                "pass_description": ": Single-family / townhouse / condo (3rd floor or lower) — Mobile/Manufactured Homes Book if on permanent solid foundation and has 2x4 Framing",
+                "fail_description": "Not: : Single-family / townhouse / condo (3rd floor or lower) — Mobile/Manufactured Homes Book if on permanent solid foundation and has 2x4 Framing or: Sheds, Trailers, RV"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bAppointment\\s+length\\s+not\\s+specified\\b"
+                ],
+                "pass_description": "Appointment is confirmed as being 60-90 minutes",
+                "fail_description": "Appointment length not specified"
+              },
+              {
+                "name": "All decision makers present",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bQuestion\\s+about\\s+decision\\s+makers\\s+not\\s+asked\\s+or\\s+other\\s+decision\\s+makers\\s+exist\\s+but\\s+will\\s+not\\s+be\\s+present\\b"
+                ],
+                "pass_description": "All decision makers like spouses, long term partners, or domestic partners are confirmed to be present if applicable",
+                "fail_description": "Question about decision makers not asked or other decision makers exist but will not be present"
+              },
+              {
+                "name": "Address Confirmed",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
+                  "\\bCustomer\\s+confirms\\s+their\\s+address\\b"
+                ],
+                "negative_patterns": [
+                  "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+address\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
+                ],
+                "pass_description": "Customer confirms their address",
+                "fail_description": "no questions in regard to address and it's accuracy asked"
+              },
+              {
+                "name": "Number Confirmed",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
+                  "\\bPhone\\s+Number\\s+is\\s+confirmed\\b"
+                ],
+                "negative_patterns": [
+                  "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+phone\\s+number\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
+                ],
+                "pass_description": "Phone Number is confirmed",
+                "fail_description": "no questions in regard to phone number and it's accuracy asked"
+              },
+              {
+                "name": "Government Grant Disclosure",
+                "type": null,
+                "positive_patterns": [
+                  "\\bgovernment\\s+(?:assistance|grant|program|aid|fund)\\b",
+                  "\\bfree\\s+windows?\\b",
+                  "\\bdoesn'?t\\s+(?:participate|do|cover|offer)\\s+government\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcustomer\\s+wants\\s+free\\s+windows\\s+and\\s+does\\s+not\\s+understand\\s+that\\s+we\\s+do\\s+not\\s+give\\s+free\\s+windows\\b"
+                ],
+                "pass_description": "Before we proceed, we'd like to confirm that Renewal by Andersen does not participate with government assistance programs for free windows, and all costs do come to the homeowner.\" (CUSTOMER MUST ACKNOWLEDGE)",
+                "fail_description": "customer wants free windows and does not understand that we do not give free windows"
+              },
+              {
+                "name": "No unapproved projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bA\\s+glass\\s+repair\\s+or\\s+door\\s+repair\\s+project,\\s+involving\\s+a\\s+shed,\\s+or\\s+a\\s+project\\s+only\\s+involving\\s+screen\\s+doors,\\s+egress\\s+windows,\\s+storm\\s+windows\\s+without\\s+full\\s+window\\s+replacement\\b"
+                ],
+                "pass_description": "Not a glass repair or door repair project, not involving a shed, not a project only involving screen doors, no egress windows, and no storm windows without full window replacement",
+                "fail_description": "A glass repair or door repair project, involving a shed, or a project only involving screen doors, egress windows, storm windows without full window replacement"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Address Confirmed",
+          "All decision makers present",
+          "Appointment Length",
+          "Government Grant Disclosure",
+          "Home Type Approved",
+          "Homeowner confirmed",
+          "No unapproved projects",
+          "Recorded line confirmed"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-6c6b827e4a2e",
+      "name": "Pella",
+      "source_name": "Pella_scorecard (2).csv",
+      "saved_at": "2026-07-06 17:54:18",
+      "bundle": {
+        "version": 1,
+        "name": "Pella",
+        "client_patterns": [
+          {
+            "name": "Pella Windows & Doors",
+            "patterns": [
+              "\\bPella\\b",
+              "\\bPella\\s+Windows\\b",
+              "\\bPella\\s+Windows\\s+\\&\\s+Doors\\b",
+              "\\bPella\\s+Windows\\s+and\\s+Doors\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "Pella Windows & Doors": {
+            "clients": [
+              "Pella Windows & Doors"
+            ],
+            "rules": [
+              {
+                "name": "Approved Home Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bmobile\\s+home\\b",
+                  "\\bmanufactured\\s+home\\b",
+                  "\\btrailer\\b",
+                  "\\bdouble\\s+wide\\b",
+                  "\\bsingle\\s+wide\\b",
+                  "\\bcondo\\s+fourth\\s+floor\\b",
+                  "\\btownhome\\s+fourth\\s+floor\\b",
+                  "\\b4th\\s+floor\\b",
+                  "\\bfifth\\s+floor\\b",
+                  "\\bhigher\\s+than\\s+third\\s+floor\\b",
+                  "\\babove\\s+the\\s+third\\s+floor\\b"
+                ],
+                "pass_description": "single family;single-family home;detached house;multi-family;multifamily;duplex;two family;townhome first floor;townhome second floor;townhome third floor;condo first floor;condo second floor;condo third floor",
+                "fail_description": "mobile home;manufactured home;trailer;double wide;single wide;condo fourth floor;townhome fourth floor;4th floor;fifth floor;higher than third floor;above the third floor",
+                "mishear_description": "multi family -> multifamily;town home -> townhome;mobil home -> mobile home;manufacture home -> manufactured home"
+              },
+              {
+                "name": "Credit Score",
+                "type": null,
+                "positive_patterns": [
+                  "\\b650\\s+or\\s+higher\\b",
+                  "\\bover\\s+650\\b",
+                  "\\babove\\s+650\\b",
+                  "\\bcredit\\s+score\\s+is\\s+650\\b",
+                  "\\bcredit\\s+score\\s+is\\s+good\\b",
+                  "\\bgood\\s+credit\\b"
+                ],
+                "negative_patterns": [
+                  "\\bunder\\s+650\\b",
+                  "\\bbelow\\s+650\\b",
+                  "\\bless\\s+than\\s+650\\b",
+                  "\\bbad\\s+credit\\b",
+                  "\\bpoor\\s+credit\\b"
+                ],
+                "pass_description": "650 or higher;over 650;above 650;credit score is 650;credit score is good;good credit",
+                "fail_description": "under 650;below 650;less than 650;bad credit;poor credit",
+                "mishear_description": "six fifty -> 650;six hundred fifty -> 650"
+              },
+              {
+                "name": "Project Size",
+                "type": null,
+                "positive_patterns": [
+                  "\\b3\\s+windows\\b",
+                  "\\bthree\\s+windows\\b",
+                  "\\b4\\s+windows\\b",
+                  "\\bfour\\s+windows\\b",
+                  "\\b5\\s+windows\\b",
+                  "\\bseveral\\s+windows\\b",
+                  "\\bwhole\\s+house\\b",
+                  "\\ball\\s+windows\\b"
+                ],
+                "negative_patterns": [
+                  "\\b1\\s+window\\b",
+                  "\\bone\\s+window\\b",
+                  "\\b2\\s+windows\\b",
+                  "\\btwo\\s+windows\\b",
+                  "\\bjust\\s+one\\s+window\\b",
+                  "\\bonly\\s+two\\s+windows\\b"
+                ],
+                "pass_description": "3 windows;three windows;4 windows;four windows;5 windows;several windows;whole house;all windows",
+                "fail_description": "1 window;one window;2 windows;two windows;just one window;only two windows",
+                "mishear_description": "tree windows -> three windows;too windows -> two windows"
+              },
+              {
+                "name": "No unapproved projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bsheds\\b",
+                  "\\bstorm\\s+windows\\b",
+                  "\\bscreens\\s+only\\b",
+                  "\\bjust\\s+screens\\b",
+                  "\\bscreen\\s+repair\\b",
+                  "\\bsecurity\\s+door\\b",
+                  "\\bsecurity\\s+doors\\b",
+                  "\\bnew\\s+construction\\b",
+                  "\\breduce\\s+window\\s+count\\b",
+                  "\\breducing\\s+window\\s+count\\b",
+                  "\\bturn\\s+a\\s+window\\s+into\\s+a\\s+door\\b",
+                  "\\bturn\\s+a\\s+door\\s+into\\s+a\\s+window\\b",
+                  "\\btransforming\\s+a\\s+window\\s+into\\s+a\\s+door\\b",
+                  "\\btransforming\\s+a\\s+door\\s+into\\s+a\\s+window\\b",
+                  "\\bdemolition\\b",
+                  "\\balready\\s+purchased\\s+the\\s+window\\b",
+                  "\\balready\\s+purchased\\s+the\\s+door\\b",
+                  "\\binstall\\s+a\\s+window\\s+I\\s+bought\\b",
+                  "\\binstall\\s+a\\s+door\\s+I\\s+bought\\b"
+                ],
+                "pass_description": "replacement windows;window replacement;replacing windows;replacement doors;door replacement;replacing doors;full window replacement;full door replacement;same size replacement;existing opening",
+                "fail_description": "shed;sheds;storm windows;screens only;just screens;screen repair;security door;security doors;new construction;reduce window count;reducing window count;turn a window into a door;turn a door into a window;transforming a window into a door;transforming a door into a window;demolition;already purchased the window;already purchased the door;install a window I bought;install a door I bought",
+                "mishear_description": "store windows -> storm windows;screen stores -> screen doors;new constructions -> new construction"
+              },
+              {
+                "name": "Email Confirmed",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [],
+                "pass_description": "email is correct;that is my email;yes that is correct;confirmed email;spell my email;email address is",
+                "mishear_description": "e male -> email;gmail dot com -> gmail.com"
+              },
+              {
+                "name": "Phone Confirmed",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bnot\\s+my\\s+number\\b",
+                  "\\bdifferent\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone number is correct;that is my number;best number;call me at;confirmed number;yes that is the right number",
+                "fail_description": "wrong number;not my number;different number;do not call this number"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Home Type",
+          "Credit Score",
+          "Homeowner confirmed",
+          "No unapproved projects",
+          "Project Size",
+          "Recorded line confirmed"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bmulti\\s+family\\b",
+            "replacement": "multifamily"
+          },
+          {
+            "pattern": "\\btown\\s+home\\b",
+            "replacement": "townhome"
+          },
+          {
+            "pattern": "\\bmobil\\s+home\\b",
+            "replacement": "mobile home"
+          },
+          {
+            "pattern": "\\bmanufacture\\s+home\\b",
+            "replacement": "manufactured home"
+          },
+          {
+            "pattern": "\\bsix\\s+fifty\\b",
+            "replacement": "650"
+          },
+          {
+            "pattern": "\\bsix\\s+hundred\\s+fifty\\b",
+            "replacement": "650"
+          },
+          {
+            "pattern": "\\btree\\s+windows\\b",
+            "replacement": "three windows"
+          },
+          {
+            "pattern": "\\btoo\\s+windows\\b",
+            "replacement": "two windows"
+          },
+          {
+            "pattern": "\\bstore\\s+windows\\b",
+            "replacement": "storm windows"
+          },
+          {
+            "pattern": "\\bscreen\\s+stores\\b",
+            "replacement": "screen doors"
+          },
+          {
+            "pattern": "\\bnew\\s+constructions\\b",
+            "replacement": "new construction"
+          },
+          {
+            "pattern": "\\be\\s+male\\b",
+            "replacement": "email"
+          },
+          {
+            "pattern": "\\bgmail\\s+dot\\s+com\\b",
+            "replacement": "gmail.com"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-a60a317b6525",
+      "name": "KQR",
+      "source_name": "King_Quality_Roofing_Scorecard.csv",
+      "saved_at": "2026-07-06 18:15:53",
+      "bundle": {
+        "version": 1,
+        "name": "KQR",
+        "client_patterns": [
+          {
+            "name": "King Quality Roofing",
+            "patterns": [
+              "\\bKing\\s+Quality\\b",
+              "\\bKing\\s+Quality\\s+Home\\s+Improvements\\b",
+              "\\bKing\\s+Quality\\s+Roofing\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "King Quality Roofing": {
+            "clients": [
+              "King Quality Roofing"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
+                "fail_description": "wrong number;do not call this number"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+              },
+              {
+                "name": "Roof Age Or Damage",
+                "type": null,
+                "positive_patterns": [
+                  "\\b15\\s+years\\s+old\\b",
+                  "\\bover\\s+15\\s+years\\s+old\\b",
+                  "\\bshowing\\s+damage\\b",
+                  "\\bvisible\\s+damage\\b",
+                  "\\bleaking\\b",
+                  "\\bmissing\\s+shingles\\b",
+                  "\\broof\\s+damage\\b"
+                ],
+                "negative_patterns": [
+                  "\\bbrand\\s+new\\s+roof\\b",
+                  "\\bless\\s+than\\s+15\\s+years\\s+old\\b",
+                  "\\bno\\s+damage\\b",
+                  "\\bjust\\s+looking\\b"
+                ],
+                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;roof damage",
+                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+              },
+              {
+                "name": "Approved Roofing Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bflat\\s+roof\\b",
+                  "\\bcommercial\\s+roof\\b",
+                  "\\bmetal\\s+only\\b",
+                  "\\bslate\\s+only\\b",
+                  "\\btile\\s+only\\b"
+                ],
+                "pass_description": "asphalt shingles;shingle roof;open to asphalt;interested in shingles;not flat",
+                "fail_description": "flat roof;commercial roof;metal only;slate only;tile only"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bnon\\s+King\\s+Quality\\s+repair\\b",
+                  "\\bflat\\s+roof\\b",
+                  "\\bcommercial\\s+project\\b",
+                  "\\bsoffit\\s+only\\b",
+                  "\\bfascia\\s+only\\b",
+                  "\\bsliding\\s+door\\s+only\\b"
+                ],
+                "pass_description": "roof replacement;full roof replacement;King Quality roof repair;window replacement;siding replacement;gutter replacement;entry door replacement",
+                "fail_description": "non King Quality repair;flat roof;commercial project;soffit only;fascia only;sliding door only",
+                "mishear_description": "sofett -> soffit; facia -> fascia"
+              },
+              {
+                "name": "No Unapproved Projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bgreenhouse\\b",
+                  "\\bskylight\\s+only\\b",
+                  "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
+                  "\\boutbuilding\\s+only\\b"
+                ],
+                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;skylight with roof replacement;same home roof",
+                "fail_description": "shed;greenhouse;skylight only;skylight without full roof replacement;outbuilding only"
+              },
+              {
+                "name": "Insurance Adjuster",
+                "type": null,
+                "positive_patterns": [
+                  "\\badjuster\\s+already\\s+came\\b",
+                  "\\badjuster\\s+has\\s+visited\\b",
+                  "\\binsurance\\s+inspected\\s+it\\b",
+                  "\\bclaim\\s+approved\\b",
+                  "\\badjuster\\s+looked\\s+at\\s+it\\b"
+                ],
+                "negative_patterns": [
+                  "\\badjuster\\s+has\\s+not\\s+come\\s+yet\\b",
+                  "\\bwaiting\\s+for\\s+adjuster\\b",
+                  "\\bno\\s+adjuster\\s+visit\\b"
+                ],
+                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
+                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "90 minutes;about 90 minutes;approximately 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+              },
+              {
+                "name": "Approved Time Slot",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\b9\\s+AM\\s+only\\b",
+                  "\\b1\\s+PM\\s+only\\b",
+                  "\\b5\\s+PM\\s+only\\b",
+                  "\\bsame\\s+day\\b"
+                ],
+                "pass_description": "10 AM;2 PM;6 PM;ten AM;two PM;six PM",
+                "fail_description": "9 AM only;1 PM only;5 PM only;same day"
+              },
+              {
+                "name": "No Same Day",
+                "type": null,
+                "positive_patterns": [
+                  "\\bno\\s+same\\s+day\\b",
+                  "\\btomorrow\\s+works\\b",
+                  "\\blater\\s+this\\s+week\\b",
+                  "\\bwithin\\s+72\\s+hours\\b",
+                  "\\bnext\\s+available\\b"
+                ],
+                "negative_patterns": [
+                  "\\btoday\\s+only\\b",
+                  "\\bsame\\s+day\\s+appointment\\b"
+                ],
+                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
+                "fail_description": "today only;same day appointment"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Roofing Type",
+          "Approved Service",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "Insurance Adjuster",
+          "No Same Day",
+          "No Unapproved Projects",
+          "Recorded line confirmed",
+          "Roof Age Or Damage"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bsofett\\b",
+            "replacement": "soffit"
+          },
+          {
+            "pattern": "\\bfacia\\b",
+            "replacement": "fascia"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-716418e2b9a0",
+      "name": "Forte",
+      "source_name": "Forte_Roofing_Scorecard.csv",
+      "saved_at": "2026-07-06 18:16:54",
+      "bundle": {
+        "version": 1,
+        "name": "Forte",
+        "client_patterns": [
+          {
+            "name": "Forte Roofing",
+            "patterns": [
+              "\\bForte\\b",
+              "\\bForte\\s+Roofing\\b",
+              "\\bForte\\s+Roofing\\s+NY\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "Forte Roofing": {
+            "clients": [
+              "Forte Roofing"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
+                "fail_description": "wrong number;do not call this number"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+              },
+              {
+                "name": "Roof Age Or Damage",
+                "type": null,
+                "positive_patterns": [
+                  "\\b15\\s+years\\s+old\\b",
+                  "\\bover\\s+15\\s+years\\s+old\\b",
+                  "\\bshowing\\s+damage\\b",
+                  "\\bvisible\\s+damage\\b",
+                  "\\bleaking\\b",
+                  "\\bmissing\\s+shingles\\b",
+                  "\\broof\\s+damage\\b"
+                ],
+                "negative_patterns": [
+                  "\\bbrand\\s+new\\s+roof\\b",
+                  "\\bless\\s+than\\s+15\\s+years\\s+old\\b",
+                  "\\bno\\s+damage\\b",
+                  "\\bjust\\s+looking\\b"
+                ],
+                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;roof damage",
+                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+              },
+              {
+                "name": "Approved Roofing Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bmetal\\s+roof\\s+only\\b",
+                  "\\bslate\\s+roof\\b",
+                  "\\btile\\s+roof\\b",
+                  "\\brubber\\s+roof\\b",
+                  "\\bfiberglass\\s+roof\\b",
+                  "\\b3\\-tab\\s+shingles\\b"
+                ],
+                "pass_description": "asphalt shingles;shingle roof;open to asphalt;converting to asphalt;residential flat roof",
+                "fail_description": "metal roof only;slate roof;tile roof;rubber roof;fiberglass roof;3-tab shingles",
+                "mishear_description": "three tab -> 3-tab"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bnon\\s+Forte\\s+repair\\b",
+                  "\\bcommercial\\s+flat\\s+roof\\b",
+                  "\\bwindow\\s+repair\\s+on\\s+non\\s+Forte\\s+windows\\b",
+                  "\\bsiding\\s+repair\\s+on\\s+non\\s+Forte\\s+siding\\b"
+                ],
+                "pass_description": "roof replacement;full roof replacement;residential flat roof replacement;commercial asphalt roof;window replacement;siding replacement;gutter replacement",
+                "fail_description": "non Forte repair;commercial flat roof;window repair on non Forte windows;siding repair on non Forte siding"
+              },
+              {
+                "name": "No Unapproved Projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bgreenhouse\\b",
+                  "\\bskylight\\s+only\\b",
+                  "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
+                  "\\boutbuilding\\s+only\\b"
+                ],
+                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;skylight with roof replacement;same home roof",
+                "fail_description": "shed;greenhouse;skylight only;skylight without full roof replacement;outbuilding only"
+              },
+              {
+                "name": "Insurance Adjuster",
+                "type": null,
+                "positive_patterns": [
+                  "\\badjuster\\s+already\\s+came\\b",
+                  "\\badjuster\\s+has\\s+visited\\b",
+                  "\\binsurance\\s+inspected\\s+it\\b",
+                  "\\bclaim\\s+approved\\b",
+                  "\\badjuster\\s+looked\\s+at\\s+it\\b"
+                ],
+                "negative_patterns": [
+                  "\\badjuster\\s+has\\s+not\\s+come\\s+yet\\b",
+                  "\\bwaiting\\s+for\\s+adjuster\\b",
+                  "\\bno\\s+adjuster\\s+visit\\b"
+                ],
+                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
+                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "90 minutes;about 90 minutes;approximately 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+              },
+              {
+                "name": "Approved Time Slot",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\b9\\s+AM\\s+only\\b",
+                  "\\b1\\s+PM\\s+only\\b",
+                  "\\b5\\s+PM\\s+only\\b",
+                  "\\bsame\\s+day\\b"
+                ],
+                "pass_description": "10 AM;2 PM;6 PM;ten AM;two PM;six PM",
+                "fail_description": "9 AM only;1 PM only;5 PM only;same day"
+              },
+              {
+                "name": "No Same Day",
+                "type": null,
+                "positive_patterns": [
+                  "\\bno\\s+same\\s+day\\b",
+                  "\\btomorrow\\s+works\\b",
+                  "\\blater\\s+this\\s+week\\b",
+                  "\\bwithin\\s+72\\s+hours\\b",
+                  "\\bnext\\s+available\\b"
+                ],
+                "negative_patterns": [
+                  "\\btoday\\s+only\\b",
+                  "\\bsame\\s+day\\s+appointment\\b"
+                ],
+                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
+                "fail_description": "today only;same day appointment"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Roofing Type",
+          "Approved Service",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "Insurance Adjuster",
+          "No Same Day",
+          "No Unapproved Projects",
+          "Recorded line confirmed",
+          "Roof Age Or Damage"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bthree\\s+tab\\b",
+            "replacement": "3-tab"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-9da7e40aedea",
+      "name": "JPC",
+      "source_name": "JP_Carroll_Roofing_Scorecard.csv",
+      "saved_at": "2026-07-06 18:17:15",
+      "bundle": {
+        "version": 1,
+        "name": "JPC",
+        "client_patterns": [
+          {
+            "name": "JP Carroll Roofing",
+            "patterns": [
+              "\\bJ\\s+P\\s+Carroll\\b",
+              "\\bJP\\s+Carrol\\s+Roofing\\b",
+              "\\bJP\\s+Carroll\\b",
+              "\\bJP\\s+Carroll\\s+Roofing\\b",
+              "\\bJPCarroll\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "JP Carroll Roofing": {
+            "clients": [
+              "JP Carroll Roofing"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
+                "fail_description": "wrong number;do not call this number",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "decision maker will be there;all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Repair Roof Age",
+                "type": null,
+                "positive_patterns": [
+                  "\\broof\\s+is\\s+10\\s+years\\s+old\\b",
+                  "\\bover\\s+10\\s+years\\s+old\\b",
+                  "\\b10\\s+plus\\s+years\\b",
+                  "\\bolder\\s+roof\\b",
+                  "\\broof\\s+is\\s+about\\s+12\\s+years\\s+old\\b",
+                  "\\broof\\s+is\\s+about\\s+20\\s+years\\s+old\\b"
+                ],
+                "negative_patterns": [
+                  "\\broof\\s+is\\s+under\\s+10\\s+years\\s+old\\b",
+                  "\\bnew\\s+roof\\b",
+                  "\\bfive\\s+years\\s+old\\b",
+                  "\\brepair\\s+on\\s+newer\\s+roof\\b"
+                ],
+                "pass_description": "roof is 10 years old;over 10 years old;10 plus years;older roof;roof is about 12 years old;roof is about 20 years old",
+                "fail_description": "roof is under 10 years old;new roof;five years old;repair on newer roof",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "No Metal Roofing",
+                "type": null,
+                "positive_patterns": [
+                  "\\basphalt\\s+shingles\\b",
+                  "\\bshingle\\s+roof\\b",
+                  "\\bopen\\s+to\\s+asphalt\\b",
+                  "\\binterested\\s+in\\s+shingles\\b",
+                  "\\bnot\\s+metal\\b"
+                ],
+                "negative_patterns": [
+                  "\\bmetal\\s+roof\\b",
+                  "\\bstanding\\s+seam\\b",
+                  "\\bmetal\\s+roofing\\b",
+                  "\\bonly\\s+want\\s+metal\\b"
+                ],
+                "pass_description": "asphalt shingles;shingle roof;open to asphalt;interested in shingles;not metal",
+                "fail_description": "metal roof;standing seam;metal roofing;only want metal",
+                "mishear_description": "JP Carrol -> JP Carroll; standing seem -> standing seam"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bmetal\\s+roofing\\b",
+                  "\\bmetal\\s+roof\\s+only\\b"
+                ],
+                "pass_description": "roof replacement;roof repair;roof issue;leak;missing shingles;roof damage;asphalt shingles",
+                "fail_description": "metal roofing;metal roof only",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "No Unapproved Projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bgreenhouse\\b",
+                  "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
+                  "\\bdetached\\s+structure\\s+only\\b",
+                  "\\boutbuilding\\s+only\\b"
+                ],
+                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
+                "fail_description": "shed;greenhouse;skylight without full roof replacement;detached structure only;outbuilding only",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "60 to 90 minutes;sixty to ninety minutes;about 90 minutes;appointment is 60 to 90 minutes;consultation takes about an hour",
+                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "No Same Day",
+                "type": null,
+                "positive_patterns": [
+                  "\\bno\\s+same\\s+day\\b",
+                  "\\btomorrow\\s+works\\b",
+                  "\\blater\\s+this\\s+week\\b",
+                  "\\bwithin\\s+7\\s+days\\b",
+                  "\\bnext\\s+available\\b"
+                ],
+                "negative_patterns": [
+                  "\\btoday\\s+only\\b",
+                  "\\bsame\\s+day\\s+appointment\\b"
+                ],
+                "pass_description": "no same day;tomorrow works;later this week;within 7 days;next available",
+                "fail_description": "today only;same day appointment",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              },
+              {
+                "name": "Booked Correct Calendar",
+                "type": null,
+                "positive_patterns": [
+                  "\\bJP\\s+Carroll\\s+calendar\\b",
+                  "\\bcorrect\\s+calendar\\b",
+                  "\\bbook\\s+on\\s+JP\\s+Carroll\\b",
+                  "\\bJP\\s+Carroll\\s+appointment\\b"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+calendar\\b",
+                  "\\bBachmans\\s+calendar\\b",
+                  "\\bForte\\s+calendar\\b",
+                  "\\bKing\\s+Quality\\s+calendar\\b"
+                ],
+                "pass_description": "JP Carroll calendar;correct calendar;book on JP Carroll;JP Carroll appointment",
+                "fail_description": "wrong calendar;Bachmans calendar;Forte calendar;King Quality calendar",
+                "mishear_description": "JP Carrol -> JP Carroll"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Service",
+          "Booked Correct Calendar",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "No Metal Roofing",
+          "No Same Day",
+          "No Unapproved Projects",
+          "Recorded line confirmed",
+          "Repair Roof Age"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bstanding\\s+seem\\b",
+            "replacement": "standing seam"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          },
+          {
+            "pattern": "\\bJP\\s+Carrol\\b",
+            "replacement": "JP Carroll"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-43752ab4c65a",
+      "name": "Bachmans",
+      "source_name": "Bachmans_Roofing_Scorecard.csv",
+      "saved_at": "2026-07-06 18:17:27",
+      "bundle": {
+        "version": 1,
+        "name": "Bachmans",
+        "client_patterns": [
+          {
+            "name": "Bachmans Roofing",
+            "patterns": [
+              "\\bBachman\\s+Roofing\\b",
+              "\\bBachman's\\b",
+              "\\bBachman's\\s+Roofing\\b",
+              "\\bBachmans\\b",
+              "\\bBachmans\\s+Roofing\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "Bachmans Roofing": {
+            "clients": [
+              "Bachmans Roofing"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
+                "fail_description": "wrong number;do not call this number"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+              },
+              {
+                "name": "Roof Age Or Damage",
+                "type": null,
+                "positive_patterns": [
+                  "\\b15\\s+years\\s+old\\b",
+                  "\\bover\\s+15\\s+years\\s+old\\b",
+                  "\\bshowing\\s+damage\\b",
+                  "\\bvisible\\s+damage\\b",
+                  "\\bleaking\\b",
+                  "\\bmissing\\s+shingles\\b",
+                  "\\bblown\\s+off\\s+shingles\\b",
+                  "\\bstorm\\s+damage\\b"
+                ],
+                "negative_patterns": [
+                  "\\bbrand\\s+new\\s+roof\\b",
+                  "\\bless\\s+than\\s+15\\s+years\\s+old\\b",
+                  "\\bno\\s+damage\\b",
+                  "\\bjust\\s+looking\\b"
+                ],
+                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;blown off shingles;storm damage",
+                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+              },
+              {
+                "name": "Approved Roofing Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bmetal\\s+roof\\s+only\\b",
+                  "\\bslate\\s+roof\\s+only\\b",
+                  "\\btile\\s+roof\\s+only\\b",
+                  "\\bnot\\s+open\\s+to\\s+asphalt\\b"
+                ],
+                "pass_description": "asphalt shingles;EPDM;modified bitumen;open to asphalt;shingle roof;flat roof EPDM",
+                "fail_description": "metal roof only;slate roof only;tile roof only;not open to asphalt",
+                "mishear_description": "EPDM -> EPDM; modified bitumen -> modified bitumen"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bentry\\s+door\\s+only\\b",
+                  "\\bglass\\s+only\\s+repair\\b",
+                  "\\bblock\\s+windows\\b",
+                  "\\bgutter\\s+guards\\s+only\\b",
+                  "\\bGutter\\s+Helmet\\b",
+                  "\\bhalf\\s+round\\s+gutters\\b"
+                ],
+                "pass_description": "roof replacement;roof repair;leak investigation;blown off shingles;skylight repair;skylight replacement;chimney flashing",
+                "fail_description": "entry door only;glass only repair;block windows;gutter guards only;Gutter Helmet;half round gutters",
+                "mishear_description": "gutter helmut -> Gutter Helmet; block window -> block windows"
+              },
+              {
+                "name": "No Unapproved Projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bgreenhouse\\b",
+                  "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
+                  "\\bdetached\\s+garage\\s+only\\b",
+                  "\\boutbuilding\\s+only\\b"
+                ],
+                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
+                "fail_description": "shed;greenhouse;skylight without full roof replacement;detached garage only;outbuilding only"
+              },
+              {
+                "name": "Insurance Adjuster",
+                "type": null,
+                "positive_patterns": [
+                  "\\badjuster\\s+already\\s+came\\b",
+                  "\\badjuster\\s+has\\s+visited\\b",
+                  "\\binsurance\\s+inspected\\s+it\\b",
+                  "\\bclaim\\s+approved\\b",
+                  "\\badjuster\\s+looked\\s+at\\s+it\\b"
+                ],
+                "negative_patterns": [
+                  "\\badjuster\\s+has\\s+not\\s+come\\s+yet\\b",
+                  "\\bwaiting\\s+for\\s+adjuster\\b",
+                  "\\bno\\s+adjuster\\s+visit\\b"
+                ],
+                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
+                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "90 minutes;about 90 minutes;60 to 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+              },
+              {
+                "name": "Approved Time Slot",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bsame\\s+day\\b",
+                  "\\btoday\\s+only\\b",
+                  "\\boutside\\s+9\\s+1\\s+or\\s+5\\b"
+                ],
+                "pass_description": "9 AM;1 PM;5 PM;nine AM;one PM;five PM",
+                "fail_description": "same day;today only;outside 9 1 or 5"
+              },
+              {
+                "name": "No Same Day",
+                "type": null,
+                "positive_patterns": [
+                  "\\bno\\s+same\\s+day\\b",
+                  "\\btomorrow\\s+works\\b",
+                  "\\blater\\s+this\\s+week\\b",
+                  "\\bwithin\\s+72\\s+hours\\b",
+                  "\\bnext\\s+available\\b"
+                ],
+                "negative_patterns": [
+                  "\\btoday\\s+only\\b",
+                  "\\bsame\\s+day\\s+appointment\\b"
+                ],
+                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
+                "fail_description": "today only;same day appointment"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Roofing Type",
+          "Approved Service",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "Insurance Adjuster",
+          "No Same Day",
+          "No Unapproved Projects",
+          "Recorded line confirmed",
+          "Roof Age Or Damage"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bEPDM\\b",
+            "replacement": "EPDM"
+          },
+          {
+            "pattern": "\\bmodified\\s+bitumen\\b",
+            "replacement": "modified bitumen"
+          },
+          {
+            "pattern": "\\bgutter\\s+helmut\\b",
+            "replacement": "Gutter Helmet"
+          },
+          {
+            "pattern": "\\bblock\\s+window\\b",
+            "replacement": "block windows"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-ec4b2c37f0f3",
+      "name": "HRS",
+      "source_name": "Home_Roofing_Solutions_Scorecard.csv",
+      "saved_at": "2026-07-06 18:17:40",
+      "bundle": {
+        "version": 1,
+        "name": "HRS",
+        "client_patterns": [
+          {
+            "name": "Home Roofing Solutions",
+            "patterns": [
+              "\\bHRS\\b",
+              "\\bHome\\s+Roofing\\b",
+              "\\bHome\\s+Roofing\\s+Solutions\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "Home Roofing Solutions": {
+            "clients": [
+              "Home Roofing Solutions"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                ],
+                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
+                "fail_description": "wrong number;do not call this number"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+              },
+              {
+                "name": "Roof Age Or Wear",
+                "type": null,
+                "positive_patterns": [
+                  "\\b10\\s+years\\s+old\\b",
+                  "\\bover\\s+10\\s+years\\s+old\\b",
+                  "\\bshowing\\s+wear\\b",
+                  "\\bvisible\\s+wear\\b",
+                  "\\bleaks\\b",
+                  "\\bmissing\\s+shingles\\b",
+                  "\\bstaining\\b",
+                  "\\bstorm\\s+damage\\b"
+                ],
+                "negative_patterns": [
+                  "\\bnew\\s+roof\\b",
+                  "\\bless\\s+than\\s+10\\s+years\\s+old\\b",
+                  "\\bno\\s+wear\\b",
+                  "\\bno\\s+damage\\b"
+                ],
+                "pass_description": "10 years old;over 10 years old;showing wear;visible wear;leaks;missing shingles;staining;storm damage",
+                "fail_description": "new roof;less than 10 years old;no wear;no damage"
+              },
+              {
+                "name": "Approved Roofing Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bflat\\s+commercial\\s+roof\\b",
+                  "\\bslate\\s+only\\b",
+                  "\\btile\\s+only\\b"
+                ],
+                "pass_description": "asphalt shingles;metal roofing;shingle roof;metal roof;open to asphalt;open to metal",
+                "fail_description": "flat commercial roof;slate only;tile only"
+              },
+              {
+                "name": "Storm Claim Adjuster",
+                "type": null,
+                "positive_patterns": [
+                  "\\badjuster\\s+already\\s+came\\b",
+                  "\\badjuster\\s+inspected\\b",
+                  "\\binsurance\\s+adjuster\\s+visited\\b",
+                  "\\bstorm\\s+claim\\s+inspected\\b",
+                  "\\bclaim\\s+already\\s+reviewed\\b"
+                ],
+                "negative_patterns": [
+                  "\\badjuster\\s+has\\s+not\\s+visited\\b",
+                  "\\bwaiting\\s+for\\s+adjuster\\b",
+                  "\\bno\\s+adjuster\\s+yet\\b"
+                ],
+                "pass_description": "adjuster already came;adjuster inspected;insurance adjuster visited;storm claim inspected;claim already reviewed",
+                "fail_description": "adjuster has not visited;waiting for adjuster;no adjuster yet"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcommercial\\s+roof\\b",
+                  "\\bsmall\\s+shed\\s+roof\\b",
+                  "\\bgreenhouse\\s+roof\\b"
+                ],
+                "pass_description": "roof replacement;full roof replacement;roof inspection;leak evaluation;storm damage;insurance roof claim;metal roof replacement",
+                "fail_description": "commercial roof;small shed roof;greenhouse roof"
+              },
+              {
+                "name": "No Unapproved Projects",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\bglass\\s+(?:repair|replacement)\\b",
+                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bshed\\b",
+                  "\\bgreenhouse\\b",
+                  "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
+                  "\\boutbuilding\\s+only\\b"
+                ],
+                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
+                "fail_description": "shed;greenhouse;skylight without full roof replacement;outbuilding only"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "60 to 90 minutes;sixty to ninety minutes;about 90 minutes;appointment is 60 to 90 minutes;consultation takes about an hour",
+                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+              },
+              {
+                "name": "Approved Time Slot",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\b10\\s+AM\\s+only\\b",
+                  "\\b2\\s+PM\\s+only\\b",
+                  "\\bsame\\s+day\\b",
+                  "\\boutside\\s+9\\s+1\\s+or\\s+5\\b"
+                ],
+                "pass_description": "9 AM;1 PM;5 PM;nine AM;one PM;five PM",
+                "fail_description": "10 AM only;2 PM only;same day;outside 9 1 or 5"
+              },
+              {
+                "name": "No Same Day",
+                "type": null,
+                "positive_patterns": [
+                  "\\bno\\s+same\\s+day\\b",
+                  "\\btomorrow\\s+works\\b",
+                  "\\blater\\s+this\\s+week\\b",
+                  "\\bwithin\\s+72\\s+hours\\b",
+                  "\\bnext\\s+available\\b"
+                ],
+                "negative_patterns": [
+                  "\\btoday\\s+only\\b",
+                  "\\bsame\\s+day\\s+appointment\\b"
+                ],
+                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
+                "fail_description": "today only;same day appointment"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Roofing Type",
+          "Approved Service",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "No Same Day",
+          "No Unapproved Projects",
+          "Recorded line confirmed",
+          "Roof Age Or Wear",
+          "Storm Claim Adjuster"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          }
+        ]
+      }
+    },
+    {
+      "id": "friendly-csv-scorecard-baa65f344d92",
+      "name": "Feldco",
+      "source_name": "Feldco_Windows_Doors_Scorecard (1).csv",
+      "saved_at": "2026-07-06 19:26:22",
+      "bundle": {
+        "version": 1,
+        "name": "Feldco",
+        "client_patterns": [
+          {
+            "name": "Feldco Windows Doors",
+            "patterns": [
+              "\\bFeldco\\b",
+              "\\bFeldco\\s+Doors\\b",
+              "\\bFeldco\\s+Windows\\b",
+              "\\bFeldco\\s+Windows\\s+\\&\\s+Doors\\b",
+              "\\bFeldco\\s+Windows\\s+Doors\\b",
+              "\\bFeldco\\s+Windows\\s+Siding\\s+Doors\\s+\\&\\s+Roofing\\b",
+              "\\bFeldco\\s+Windows\\s+and\\s+Doors\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {
+          "Feldco Windows Doors": {
+            "clients": [
+              "Feldco Windows Doors"
+            ],
+            "rules": [
+              {
+                "name": "Confirmed Address",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+address\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
+                  "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
+                ],
+                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
+                "fail_description": "wrong address;that is not my address;I do not live there"
+              },
+              {
+                "name": "Confirmed Email",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+email\\b",
+                  "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
+                  "\\bno\\s+email\\b"
+                ],
+                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
+                "fail_description": "wrong email;I do not have email;no email"
+              },
+              {
+                "name": "Confirmed Phone",
+                "type": null,
+                "positive_patterns": [
+                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
+                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
+                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
+                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
+                  "\\bemail\\b",
+                  "\\be[-\\s]?mail\\s+address\\b",
+                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                ],
+                "negative_patterns": [
+                  "\\bwrong\\s+number\\b",
+                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b",
+                  "\\bbad\\s+number\\b",
+                  "\\bnot\\s+my\\s+phone\\s+number\\b",
+                  "\\bthat\\s+is\\s+not\\s+my\\s+number\\b"
+                ],
+                "pass_description": "phone number is;best number is;call me at;this is my cell;this number is good;same phone number;you can reach me at;my number is",
+                "fail_description": "wrong number;do not call this number;bad number;not my phone number;that is not my number"
+              },
+              {
+                "name": "Exterior Material",
+                "type": null,
+                "positive_patterns": [
+                  "\\bvinyl\\s+siding\\b",
+                  "\\bbrick\\s+exterior\\b",
+                  "\\bwood\\s+exterior\\b",
+                  "\\baluminum\\s+siding\\b",
+                  "\\bstucco\\b",
+                  "\\bexterior\\s+is\\b",
+                  "\\boutside\\s+is\\b"
+                ],
+                "negative_patterns": [],
+                "pass_description": "vinyl siding;brick exterior;wood exterior;aluminum siding;stucco;exterior is;outside is"
+              },
+              {
+                "name": "Garage Type",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [],
+                "pass_description": "attached garage;detached garage;garage is attached;garage is detached;no garage"
+              },
+              {
+                "name": "Window Count",
+                "type": null,
+                "positive_patterns": [
+                  "\\bone\\s+window\\b",
+                  "\\btwo\\s+windows\\b",
+                  "\\bthree\\s+windows\\b",
+                  "\\bhow\\s+many\\s+windows\\b",
+                  "\\breplace\\s+all\\s+windows\\b",
+                  "\\bno\\s+minimum\\s+window\\s+requirement\\b"
+                ],
+                "negative_patterns": [],
+                "pass_description": "one window;two windows;three windows;how many windows;replace all windows;no minimum window requirement"
+              },
+              {
+                "name": "Decision Makers",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
+                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                ],
+                "negative_patterns": [
+                  "\\bdecision\\s+maker\\s+cannot\\s+attend\\b",
+                  "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
+                  "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
+                ],
+                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there;Refused",
+                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there",
+                "mishear_description": "refuse -> Refused"
+              },
+              {
+                "name": "Appointment Length",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
+                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bcan\\s+not\\s+do\\s+90\\s+minutes\\b",
+                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
+                  "\\btoo\\s+long\\b"
+                ],
+                "pass_description": "60 to 90 minutes;sixty to ninety minutes;appointment is 60 to 90 minutes;consultation takes about an hour;about 90 minutes",
+                "fail_description": "can not do 90 minutes;only have 20 minutes;too long"
+              },
+              {
+                "name": "Vinyl Disclaimer",
+                "type": null,
+                "positive_patterns": [
+                  "\\bvinyl\\s+disclaimer\\b",
+                  "\\bwindows\\s+are\\s+vinyl\\b",
+                  "\\bFeldco\\s+windows\\s+are\\s+vinyl\\b",
+                  "\\bread\\s+the\\s+vinyl\\s+disclaimer\\b",
+                  "\\bvinyl\\s+window\\s+disclaimer\\s+from\\s+CRM\\b",
+                  "\\b100%\\s+vinyl\\s+windows\\b"
+                ],
+                "negative_patterns": [
+                  "\\baluminum\\s+windows\\b",
+                  "\\bwood\\s+windows\\b",
+                  "\\bstorm\\s+windows\\s+only\\b",
+                  "\\bdid\\s+not\\s+read\\s+disclaimer\\b",
+                  "\\bstorm\\s+windows\\b",
+                  "\\bstorm\\s+window\\b"
+                ],
+                "pass_description": "vinyl disclaimer;windows are vinyl;Feldco windows are vinyl;read the vinyl disclaimer;vinyl window disclaimer from CRM;100% vinyl windows",
+                "fail_description": "aluminum windows;wood windows;storm windows only;did not read disclaimer;storm windows;storm window",
+                "mishear_description": "final disclaimer -> vinyl disclaimer"
+              },
+              {
+                "name": "Approved Service",
+                "type": null,
+                "positive_patterns": [],
+                "negative_patterns": [
+                  "\\broofing\\b",
+                  "\\bsiding\\b",
+                  "\\bstorm\\s+door\\b",
+                  "\\bstorm\\s+doors\\b",
+                  "\\bstorm\\s+windows\\s+only\\b",
+                  "\\bstorm\\s+window\\b",
+                  "\\bstorm\\s+windows\\b",
+                  "\\brepair\\s+only\\b",
+                  "\\bglass\\s+only\\b",
+                  "\\bsingle\\s+wide\\s+mobile\\s+home\\b",
+                  "\\brenting\\b",
+                  "\\brenter\\b",
+                  "\\btenant\\b"
+                ],
+                "fail_description": "roofing;siding;storm door;storm doors;storm windows only;storm window;storm windows;repair only;glass only;single wide mobile home;renting;renter;tenant",
+                "mishear_description": "single-wide -> single wide;store door -> storm door;double-wide -> double wide;store window -> storm window"
+              },
+              {
+                "name": "Approved Time Slot",
+                "type": null,
+                "positive_patterns": [
+                  "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
+                  "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
+                ],
+                "negative_patterns": [
+                  "\\bSunday\\b",
+                  "\\bafter\\s+5\\s+Friday\\s+for\\s+Saturday\\b",
+                  "\\bSaturday\\s+after\\s+5\\s+PM\\b",
+                  "\\boutside\\s+appointment\\s+times\\b"
+                ],
+                "pass_description": "12:30;3:30;6:30;10:30;1:30;4:30;9:30",
+                "fail_description": "Sunday;after 5 Friday for Saturday;Saturday after 5 PM;outside appointment times",
+                "mishear_description": "twelve thirty -> 12:30;three thirty -> 3:30;six thirty -> 6:30;ten thirty -> 10:30"
+              }
+            ]
+          }
+        },
+        "critical_checks": [
+          "Approved Service",
+          "Approved Time Slot",
+          "Confirmed Address",
+          "Confirmed Email",
+          "Confirmed Phone",
+          "Decision Makers",
+          "Homeowner confirmed",
+          "Recorded line confirmed",
+          "Vinyl Disclaimer"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\brefuse\\b",
+            "replacement": "Refused"
+          },
+          {
+            "pattern": "\\bfinal\\s+disclaimer\\b",
+            "replacement": "vinyl disclaimer"
+          },
+          {
+            "pattern": "\\bsingle\\-wide\\b",
+            "replacement": "single wide"
+          },
+          {
+            "pattern": "\\bstore\\s+door\\b",
+            "replacement": "storm door"
+          },
+          {
+            "pattern": "\\bdouble\\-wide\\b",
+            "replacement": "double wide"
+          },
+          {
+            "pattern": "\\bstore\\s+window\\b",
+            "replacement": "storm window"
+          },
+          {
+            "pattern": "\\btwelve\\s+thirty\\b",
+            "replacement": "12:30"
+          },
+          {
+            "pattern": "\\bthree\\s+thirty\\b",
+            "replacement": "3:30"
+          },
+          {
+            "pattern": "\\bsix\\s+thirty\\b",
+            "replacement": "6:30"
+          },
+          {
+            "pattern": "\\bten\\s+thirty\\b",
+            "replacement": "10:30"
+          }
+        ]
+      }
+    },
+    {
+      "id": "built-in-default",
+      "name": "CompassQA Transcriber V2 default scorecards",
+      "source_name": "Built-in",
+      "saved_at": "2026-07-08 17:26:19",
+      "bundle": {
+        "version": 1,
+        "name": "CompassQA Transcriber V2 default scorecards",
+        "client_patterns": [
+          {
+            "name": "Feldco",
+            "patterns": [
+              "\\bfeld\\s*co\\b",
+              "\\bfeldco\\b"
+            ]
+          },
+          {
+            "name": "Pella",
+            "patterns": [
+              "\\bpella\\b"
+            ]
+          },
+          {
+            "name": "QWD / Renewal by Andersen",
+            "patterns": [
+              "\\bq\\s*w\\s*d\\b",
+              "\\bqwd\\b",
+              "\\bquality\\s+window(?:s)?\\s+(?:and|&)\\s+door(?:s)?\\b",
+              "\\bquality\\s+window(?:s)?\\s+direct\\b"
+            ]
+          },
+          {
+            "name": "Renewal by Andersen",
+            "patterns": [
+              "\\brenewal\\s+by\\s+and(?:er|er?e)sen\\b",
+              "\\brenewal\\s+by\\s+anderson\\b",
+              "\\bandersen\\b",
+              "\\banderson\\b"
+            ]
+          },
+          {
+            "name": "Bachmans",
+            "patterns": [
+              "\\bbachman'?s\\b",
+              "\\bbachmans\\b",
+              "\\bbackman'?s\\b",
+              "\\bbackmans\\b",
+              "\\bback\\s+man'?s\\b"
+            ]
+          },
+          {
+            "name": "JP Carrol",
+            "patterns": [
+              "\\bj\\.?\\s*p\\.?\\s+carro?ll?\\b",
+              "\\bjp\\s+carro?ll?\\b",
+              "\\bjay\\s+pee\\s+carro?ll?\\b"
+            ]
+          },
+          {
+            "name": "King Quality Roofing",
+            "patterns": [
+              "\\bking\\s+quality\\s+roofing\\b",
+              "\\bking\\s+quality\\b"
+            ]
+          }
+        ],
+        "universal_rules": [
+          {
+            "name": "Client identified",
+            "type": "client",
+            "positive_patterns": [],
+            "negative_patterns": []
+          },
+          {
+            "name": "Home type confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bsingle[-\\s]?family\\b",
+              "\\btown\\s?home\\b",
+              "\\btownhouse\\b",
+              "\\bcondo(?:minium)?\\b",
+              "\\bmobile\\s+home\\b",
+              "\\bmanufactured\\s+home\\b",
+              "\\bmodular\\s+home\\b",
+              "\\bduplex\\b",
+              "\\bmulti[-\\s]?family\\b",
+              "\\bapartment\\b",
+              "\\bone[-\\s]?story\\b",
+              "\\btwo[-\\s]?story\\b",
+              "\\branch\\b",
+              "\\bcolonial\\b",
+              "\\bbi[-\\s]?level\\b",
+              "\\bsplit[-\\s]?level\\b",
+              "\\btype\\s+of\\s+home\\b",
+              "\\bkind\\s+of\\s+home\\b"
+            ],
+            "negative_patterns": []
+          },
+          {
+            "name": "Homeowner confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\bhomeowner\\b",
+              "\\bhome\\s+owner\\b",
+              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
+              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
+              "\\bproperty\\s+owner\\b",
+              "\\bdo\\s+you\\s+own\\b",
+              "\\bare\\s+you\\s+the\\s+owner\\b",
+              "\\bmy\\s+home\\b",
+              "\\bmy\\s+house\\b"
+            ],
+            "negative_patterns": [
+              "\\brent(?:er|ing)?\\b",
+              "\\blandlord\\b",
+              "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
+            ]
+          },
+          {
+            "name": "Recorded line confirmed",
+            "type": null,
+            "positive_patterns": [
+              "\\brecorded\\s+line\\b",
+              "\\bcorded\\s+line\\b",
+              "\\brecord\\s+line\\b",
+              "\\baccording\\s+line\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bthis\\s+(?:call|line)\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bcall\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*record(?:ed|ing)?\\b",
+              "\\bline\\s+(?:is|may\\s+be|will\\s+be)?\\s*corded\\b",
+              "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
+              "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
+            ],
+            "negative_patterns": []
+          }
+        ],
+        "client_rule_sets": {},
+        "critical_checks": [
+          "Homeowner confirmed",
+          "Recorded line confirmed"
+        ],
+        "normalization_aliases": [
+          {
+            "pattern": "\\bcorded\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\brecord\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\baccording\\s+line\\b",
+            "replacement": "recorded line"
+          },
+          {
+            "pattern": "\\bas\\s+fault\\s+shingles?\\b",
+            "replacement": "asphalt shingles"
+          },
+          {
+            "pattern": "\\bbackman'?s\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bbackmans\\b",
+            "replacement": "Bachmans"
+          },
+          {
+            "pattern": "\\bback\\s+man'?s\\b",
+            "replacement": "Bachmans"
+          }
+        ]
+      }
+    }
+  ]
+}
