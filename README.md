@@ -9,6 +9,13 @@ CompassAi is the secure online sister app for CompassQA Transcriber. It keeps th
 - Scorecards seeded from `compassai/shared/qa_scorecards.json`
 - Static scorecards and browser-local jobs/reports, with optional backend storage only if added later
 
+## Analysis Modes
+
+- **QA Mode** preserves the client-specific scorecard workflow for booked calls, including evidence, reviewer overrides, re-grading, and QA reports.
+- **Missed Opportunities Mode** evaluates non-booked calls with a universal, scorecard-free coaching workflow. It detects likely objection windows locally, sends only those windows plus the call ending for strict structured analysis, validates every returned quote against the transcript, and suppresses booked, transferred, callback, disqualified, no-contact, incomplete, or uncertain calls.
+- Missed-opportunity findings, review statuses, coaching status, reviewer notes, analysis version, prompt version, model, and cache key are stored with the call in browser storage.
+- Reports remain separated by call and grouped by agent.
+
 ## Security Defaults
 
 - Users paste their own OpenAI API key in Settings on first use.
@@ -43,6 +50,14 @@ cd compassai/web
 npm install
 cp .env.example .env.local
 npm run dev
+```
+
+Validation:
+
+```bash
+npm run typecheck
+npm test
+npm run build
 ```
 
 For real development, replace placeholder env values before running the web app.

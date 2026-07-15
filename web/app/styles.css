@@ -514,6 +514,12 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .eyebrow { color: var(--brand-dark); display: block; font-size: .72rem; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
 .topbar p, .panel-title p, .section-heading p, .subsection-heading p, .pane-heading p { color: var(--muted); margin: 4px 0 0; line-height: 1.4; }
 .topbar-action { justify-self: end; }
+.topbar-copy { min-width: 0; }
+.topbar-controls { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.mode-switch { display: inline-grid; grid-template-columns: auto auto; gap: 3px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-soft); }
+.mode-switch button { min-height: 34px; border: 0; border-radius: 6px; padding: 6px 10px; background: transparent; color: var(--muted); box-shadow: none; }
+.mode-switch button:hover { color: var(--text); box-shadow: none; }
+.mode-switch button.active { background: var(--panel); color: var(--brand-dark); box-shadow: 0 1px 4px rgba(15,23,42,.12); }
 .panel { border-radius: 8px; padding: 18px; box-shadow: 0 5px 18px rgba(15,23,42,.035); }
 .notice { border-radius: 7px; padding: 10px 12px; }
 .status-notice { display: flex; align-items: center; gap: 8px; background: color-mix(in srgb, var(--brand) 9%, var(--panel)); color: var(--brand-dark); border-color: color-mix(in srgb, var(--brand) 30%, var(--border)); font-size: .88rem; }
@@ -554,6 +560,7 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .card-tags span { border-radius: 999px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); font-size: .72rem; font-weight: 800; }
 .card-tags .matched { color: #0f766e; border-color: #99f6e4; background: #f0fdfa; }
+.card-tags .severity-high { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
 .call-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 14px; margin: 0; }
 .call-facts div { min-width: 0; }
 .call-facts dt { color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
@@ -625,6 +632,40 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .review-footer { display: block; margin: 0; padding: 0 14px 16px; }
 .review-footer label { display: grid; gap: 6px; font-weight: 800; }
 .review-footer textarea { min-height: 110px; }
+
+.opportunity-review-grid { display: grid; grid-template-columns: minmax(640px, 1.15fr) minmax(380px, .85fr); gap: 14px; padding: 14px; align-items: start; }
+.opportunity-findings { min-width: 0; display: grid; gap: 12px; }
+.opportunity-filters { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.opportunity-filters label { display: grid; align-content: end; gap: 5px; color: var(--muted); font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+.opportunity-filters label > span { color: var(--text); }
+.opportunity-filters select { min-width: 0; text-transform: capitalize; }
+.opportunity-filters input[type="range"] { width: 100%; accent-color: var(--brand); }
+.finding-count { color: var(--muted); font-size: .82rem; }
+.finding-count strong { color: var(--text); }
+.opportunity-card { border: 1px solid var(--border); border-left: 4px solid #d97706; border-radius: 8px; padding: 14px; background: var(--panel-soft); }
+.opportunity-card.high { border-left-color: #dc2626; }
+.opportunity-card.low { border-left-color: #2563eb; }
+.opportunity-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.opportunity-card h4 { margin: 0; font-size: 1rem; }
+.opportunity-card > p { margin: 10px 0; color: var(--muted); line-height: 1.5; }
+.opportunity-badges { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.opportunity-badges span, .opportunity-badges strong { border: 1px solid var(--border); border-radius: 999px; padding: 4px 7px; background: var(--panel); font-size: .7rem; text-transform: uppercase; }
+.opportunity-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opportunity-evidence > div, .coaching-box { min-width: 0; border: 1px solid var(--border); border-radius: 7px; padding: 10px; background: var(--panel); }
+.opportunity-evidence span { display: block; color: var(--muted); font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+.opportunity-evidence blockquote { margin: 6px 0 0; line-height: 1.45; white-space: normal; overflow-wrap: break-word; word-break: normal; }
+.coaching-box { margin-top: 8px; }
+.coaching-box p { margin: 4px 0 10px; color: var(--muted); line-height: 1.45; }
+.finding-review { display: grid; grid-template-columns: minmax(150px, .35fr) minmax(260px, 1fr); gap: 8px; margin-top: 8px; }
+.finding-review label { display: grid; gap: 5px; color: var(--muted); font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+.finding-review select { text-transform: capitalize; }
+.finding-review textarea { min-height: 74px; line-height: 1.4; }
+.opportunity-transcript { position: sticky; top: 14px; }
+.opportunity-transcript pre { height: calc(100vh - 340px); min-height: 520px; }
+.opportunity-empty { display: grid; place-items: center; align-content: center; gap: 8px; min-height: 330px; padding: 28px; text-align: center; color: var(--muted); }
+.opportunity-empty h4, .opportunity-empty p { margin: 0; }
+.opportunity-empty p { max-width: 620px; line-height: 1.5; }
+.opportunity-empty.compact { min-height: 190px; border: 1px dashed var(--border); border-radius: 8px; }
 
 .dialog-backdrop {
   position: fixed;
@@ -715,6 +756,7 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 :root[data-theme="dark"] .section-icon.failed { background: #451a1a; color: #fca5a5; }
 :root[data-theme="dark"] .inline-notice { background: #422006; border-color: #854d0e; color: #fde68a; }
 :root[data-theme="dark"] .card-tags .matched { background: #123d3b; border-color: #115e59; color: #99f6e4; }
+:root[data-theme="dark"] .card-tags .severity-high { background: #450a0a; border-color: #7f1d1d; color: #fecaca; }
 :root[data-theme="dark"] .score-orb.pass { background: #064e3b; color: #a7f3d0; }
 :root[data-theme="dark"] .score-orb.review { background: #422006; color: #fde68a; }
 :root[data-theme="dark"] .score-orb.fail { background: #450a0a; color: #fecaca; }
@@ -740,6 +782,9 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .qa-pane.mobile-active, .transcript-panel.mobile-active { display: block; }
   .qa-table-wrap, .transcript-panel pre { height: auto; max-height: 620px; }
   .transcript-panel pre { min-height: 480px; }
+  .opportunity-review-grid { grid-template-columns: 1fr; }
+  .opportunity-transcript { position: static; display: block; }
+  .opportunity-transcript pre { height: auto; max-height: 620px; }
 }
 
 @media (max-width: 1180px) {
@@ -759,12 +804,18 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .review-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scorecard-layout, .scorecard-tools, .settings-sections { grid-template-columns: 1fr; }
   .scorecard-editor { border-left: 0; border-top: 1px solid var(--border); padding: 14px 0 0; }
+  .topbar { grid-template-columns: 1fr; }
+  .topbar-controls { justify-content: space-between; }
+  .opportunity-filters { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 640px) {
   .topbar { grid-template-columns: auto minmax(0, 1fr); }
   .topbar-action { grid-column: 1 / -1; justify-self: stretch; }
   .topbar h2 { font-size: 1.35rem; }
+  .topbar-controls { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; }
+  .mode-switch { grid-template-columns: 1fr 1fr; }
+  .mode-switch button { min-width: 0; }
   .queue-heading, .report-heading, .section-heading { grid-template-columns: auto minmax(0, 1fr); }
   .queue-heading > button, .report-heading > button { grid-column: 1 / -1; width: 100%; }
   .drop { grid-template-columns: 1fr; }
@@ -782,6 +833,8 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .scorecard-preview { grid-template-columns: 1fr; }
   .regrade-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; }
   .regrade-dialog > footer button { width: 100%; }
+  .opportunity-filters, .opportunity-evidence, .finding-review { grid-template-columns: 1fr; }
+  .opportunity-card > header { display: grid; }
 }
 
 /* Shared legal footer and policy pages */

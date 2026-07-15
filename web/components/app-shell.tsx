@@ -21,6 +21,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Target,
   Sun,
   TriangleAlert,
   Trash2,
@@ -29,6 +30,20 @@ import {
   Users,
   X,
 } from "lucide-react";
+import {
+  aggregateMissedOpportunities,
+  createOpportunityCacheKey,
+  filterMissedOpportunities,
+  finalizeMissedOpportunityAnalysis,
+  normalizeAnalysisMode,
+  missedOpportunityResponseFormat,
+  runMissedOpportunityAnalysis,
+  summarizeMissedOpportunities,
+  type AnalysisMode,
+  type MissedOpportunity,
+  type MissedOpportunityAnalysis,
+  type MissedOpportunityModelPayload,
+} from "@/lib/missed-opportunities";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -92,6 +107,8 @@ type TransferAnalysis = {
 type JobResult = {
   result_id: string;
   grading_revision?: number;
+  missed_opportunity_revision?: number;
+  analysis_mode?: AnalysisMode;
   file_name: string;
   file_size_bytes?: number;
   label?: string;
@@ -112,6 +129,7 @@ type JobResult = {
   llm_error_report?: string;
   duration_seconds?: number;
   grading_seconds?: number;
+  missed_opportunity_analysis?: MissedOpportunityAnalysis;
 };
 type Job = {
   job_id: string;
@@ -135,9 +153,10 @@ const DEFAULT_QA_MODEL = "gpt-4o-mini";
 const TRANSCRIPTION_MODEL_STORAGE = "compassai.transcriptionModel";
 const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
+const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.6.2";
+const APP_VERSION = "1.0.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -841,13 +860,16 @@ function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? []
   };
 }
 
-export function hardenStoredResult(result: JobResult) {
+export function hardenStoredResult(result: JobResult): JobResult {
+  if (result.analysis_mode === "missed_opportunities" && !(result.qa_overrides?.length || result.analysis.rows?.length)) {
+    return { ...result, analysis_mode: "missed_opportunities" };
+  }
   const overrides = result.qa_overrides?.length ? result.qa_overrides : editorRows(result.analysis.rows ?? []);
   const preview = applyOverrides(result, overrides, result.metrics?.final_grade);
   const finalGrade = preview.metrics?.outcome === "CRITICAL MISS" && (!result.metrics?.final_grade || result.metrics.final_grade === "Approved")
     ? "Needs second review"
     : result.metrics?.final_grade;
-  return applyOverrides(result, overrides, finalGrade);
+  return { ...applyOverrides(result, overrides, finalGrade), analysis_mode: normalizeAnalysisMode(result.analysis_mode) };
 }
 
 function makeErrorReport(stage: string, error: unknown, extra: Record<string, unknown> = {}) {
@@ -954,6 +976,41 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
     customer_phone?: string;
     transfer?: Partial<TransferAnalysis>;
   };
+}
+
+async function missedOpportunityDirect(options: {
+  transcript: string;
+  callId: string;
+  apiKey: string;
+  model: string;
+  previous?: MissedOpportunity[];
+  transferOccurred?: boolean;
+}) {
+  return runMissedOpportunityAnalysis({
+    transcript: options.transcript,
+    callId: options.callId,
+    selectedModel: options.model,
+    previous: options.previous,
+    transferOccurred: options.transferOccurred,
+    evaluate: async (prompt) => {
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${options.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: options.model,
+          response_format: missedOpportunityResponseFormat(),
+          messages: [
+            { role: "system", content: prompt.system },
+            { role: "user", content: prompt.user },
+          ],
+        }),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(`CompassAi missed-opportunity relay HTTP ${response.status}: ${text.slice(0, 700)}`);
+      const payload = JSON.parse(text);
+      return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as MissedOpportunityModelPayload;
+    },
+  });
 }
 
 export function makeRuleAnalysis(transcript: string, library: ScorecardLibrary, duration = 0) {
@@ -1109,6 +1166,37 @@ export function makeReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
 	</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id);var s=state[id];if(!t||!s)return;var count=document.querySelector('[data-count="'+id+'"]');if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\\/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&'),'gi');var i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i);i++;return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches';}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next');var input=document.querySelector('[data-target="'+id+'"]');var s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
 }
 
+function reportTime(value?: number) {
+  if (value === undefined) return "No timestamp";
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(Math.floor(value % 60)).padStart(2, "0")}`;
+}
+
+export function makeMissedOpportunityReport(results: JobResult[], mirrorLeads: MirrorLead[]) {
+  const analyzed = results.filter((result) => result.missed_opportunity_analysis);
+  const aggregate = aggregateMissedOpportunities(analyzed.map((result) => ({ agent: callMeta(result, mirrorLeads).agent, analysis: result.missed_opportunity_analysis })));
+  const grouped = new Map<string, JobResult[]>();
+  analyzed.forEach((result) => {
+    const agent = callMeta(result, mirrorLeads).agent || "Unassigned agent";
+    grouped.set(agent, [...(grouped.get(agent) ?? []), result]);
+  });
+  let transcriptIndex = 0;
+  const agentSections = Array.from(grouped.entries()).map(([agent, calls]) => {
+    const count = calls.reduce((sum, call) => sum + (call.missed_opportunity_analysis?.summary.total ?? 0), 0);
+    const callSections = calls.map((result) => {
+      const index = transcriptIndex++;
+      const analysis = result.missed_opportunity_analysis!;
+      const meta = callMeta(result, mirrorLeads);
+      const findings = analysis.findings.map((finding) => `<section class="finding ${escapeHtml(finding.severity)}"><div class="finding-head"><div><span>${escapeHtml(finding.type.replaceAll("_", " "))}</span><h4>${escapeHtml(finding.title)}</h4></div><strong>${Math.round(finding.confidence * 100)}% confidence · ${escapeHtml(finding.status)}</strong></div><p>${escapeHtml(finding.summary)}</p><div class="evidence-grid"><div><span>Customer trigger · ${escapeHtml(reportTime(finding.customerTrigger.startTime))}</span><blockquote>${escapeHtml(finding.customerTrigger.text)}</blockquote></div><div><span>Agent response · ${escapeHtml(reportTime(finding.agentResponse.startTime))}</span><blockquote>${escapeHtml(finding.agentResponse.text)}</blockquote></div></div><div class="coaching"><strong>Expected action</strong><p>${escapeHtml(finding.expectedAction)}</p>${finding.suggestedResponse ? `<strong>Example response</strong><p>${escapeHtml(finding.suggestedResponse)}</p>` : ""}</div>${finding.reviewerNotes ? `<div class="reviewer-note"><strong>Reviewer notes</strong><p>${escapeHtml(finding.reviewerNotes)}</p></div>` : ""}</section>`).join("");
+      return `<article class="call-report"><header class="call-header"><span>Individual call review</span><h3>${escapeHtml(titleFor(result, mirrorLeads))}</h3></header><div class="call-meta"><span>Agent: <strong>${escapeHtml(meta.agent || "Not detected")}</strong></span><span>Customer: <strong>${escapeHtml(meta.customer || "Not matched")}</strong></span><span>Phone: <strong>${escapeHtml(meta.phone ? formatPhone(meta.phone) : "Not matched")}</strong></span><span>Disposition: <strong>${escapeHtml(analysis.disposition.value.replaceAll("_", " "))}</strong></span><span>Call time: <strong>${escapeHtml(fmtSeconds(result.duration_seconds))}</strong></span><span>Analysis time: <strong>${escapeHtml(fmtSeconds(result.grading_seconds))}</strong></span>${meta.clover ? `<span>Clover: <a href="${escapeHtml(meta.clover)}">Open matched lead</a></span>` : ""}</div>${findings || `<div class="no-findings"><strong>No supported missed opportunities</strong><span>${escapeHtml(analysis.disposition.reason)}</span></div>`}<h4>Transcript</h4><div class="search-row"><input class="search" data-target="m${index}" placeholder="Search this transcript"><button type="button" data-prev="m${index}">Previous</button><button type="button" data-next="m${index}">Next</button><span data-count="m${index}">0 matches</span></div><pre class="transcript" id="m${index}">${escapeHtml(result.transcript_text)}</pre></article>`;
+    }).join("");
+    return `<details class="agent-section" open><summary><span>Agent</span><strong>${escapeHtml(agent)}</strong><em>${calls.length} call${calls.length === 1 ? "" : "s"} · ${count} supported opportunit${count === 1 ? "y" : "ies"}</em></summary>${callSections}</details>`;
+  }).join("");
+  const total = analyzed.reduce((sum, result) => sum + (result.missed_opportunity_analysis?.summary.total ?? 0), 0);
+  const high = analyzed.reduce((sum, result) => sum + (result.missed_opportunity_analysis?.summary.highSeverityCount ?? 0), 0);
+  const commonTypes = Object.entries(aggregate.countsByType).sort(([, left], [, right]) => right - left).map(([type, count]) => `<tr><td>${escapeHtml(type.replaceAll("_", " "))}</td><td>${count}</td></tr>`).join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>CompassAi Missed Opportunities Report</title><style>body{font-family:Inter,Arial,sans-serif;margin:0;color:#17202a;background:#f4f7fb;line-height:1.5}.page{padding:28px;max-width:1500px;margin:auto}.hero{background:#0b1118;color:#e6edf5;padding:24px 28px;border-radius:8px;margin-bottom:18px}.hero h1{margin:0 0 6px;font-size:28px}.hero p{margin:0;color:#a8b3c2}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}.card{background:#fff;border:1px solid #d8dee6;border-radius:8px;padding:14px}.card span,.call-header span,.finding-head span,.evidence-grid span{color:#64748b;display:block;font-size:12px;font-weight:800;text-transform:uppercase}.card strong{display:block;font-size:22px;margin-top:4px}.table-wrap{overflow-x:auto;max-width:100%;border:1px solid #d8dee6;border-radius:8px;background:#fff}table{border-collapse:collapse;min-width:620px;width:100%;table-layout:auto}th,td{border-bottom:1px solid #d8dee6;padding:10px;text-align:left;vertical-align:top;white-space:nowrap;word-break:normal;overflow-wrap:normal}.agent-section{background:#fff;border:1px solid #b9c5d3;border-radius:8px;margin:20px 0;padding:0 16px 16px}.agent-section>summary{cursor:pointer;padding:16px 0;display:flex;align-items:center;gap:12px}.agent-section>summary em{margin-left:auto;color:#64748b;font-style:normal}.call-report{border-top:3px solid #0f766e;padding:18px 0 6px;margin:10px 0 22px}.call-header h3{margin:4px 0 12px;font-size:18px;overflow-wrap:break-word;word-break:normal}.call-meta{display:flex;flex-wrap:wrap;gap:10px 16px;color:#475569;margin-bottom:14px}.finding{border:1px solid #cbd5e1;border-left:5px solid #d97706;border-radius:7px;padding:14px;margin:12px 0;background:#fff}.finding.high{border-left-color:#dc2626}.finding.low{border-left-color:#2563eb}.finding-head{display:flex;justify-content:space-between;gap:16px}.finding-head h4{margin:3px 0}.finding-head>strong{white-space:nowrap}.finding p,.evidence-grid blockquote{white-space:normal;overflow-wrap:break-word;word-break:normal}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.evidence-grid>div,.coaching,.reviewer-note{background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:11px}.evidence-grid blockquote{margin:6px 0 0}.coaching,.reviewer-note{margin-top:10px}.coaching p,.reviewer-note p{margin:4px 0 10px}.no-findings{display:grid;gap:3px;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:7px;padding:12px}.transcript{white-space:pre-wrap;background:#05080d;color:#e5e7eb;border:1px solid #111827;border-radius:8px;padding:14px;overflow:auto;max-height:700px;overflow-wrap:break-word;word-break:normal}.search-row{display:grid;grid-template-columns:minmax(220px,380px) auto auto auto;gap:8px;align-items:center;margin:10px 0}.search-row input,.search-row button{border:1px solid #d8dee6;border-radius:7px;padding:8px 10px}a{color:#0f766e;font-weight:800}mark{background:#fde68a;color:#111827}mark.active{background:#fb923c}@media(max-width:720px){.page{padding:12px}.evidence-grid{grid-template-columns:1fr}.agent-section>summary,.finding-head{align-items:flex-start;flex-wrap:wrap}.agent-section>summary em{width:100%;margin-left:0}.search-row{grid-template-columns:1fr 1fr}.search-row input,.search-row span{grid-column:1/-1}}@media print{body{background:#fff}.page{padding:12px}.agent-section{border:0;padding:0}.search-row{display:none}.transcript{max-height:none;background:#fff;color:#17202a;border-color:#d8dee6}}</style></head><body><div class="page"><div class="hero"><h1>CompassAi Missed Opportunities Report</h1><p>Generated ${escapeHtml(new Date().toLocaleString())}. Conservative, transcript-supported coaching findings for non-booked calls.</p></div><div class="summary"><div class="card"><span>Analyzed calls</span><strong>${analyzed.length}</strong></div><div class="card"><span>Open findings</span><strong>${total}</strong></div><div class="card"><span>High severity</span><strong>${high}</strong></div><div class="card"><span>Per non-booked call</span><strong>${aggregate.opportunitiesPerNonBookedCall.toFixed(1)}</strong></div></div><h2>Most common situations</h2><div class="table-wrap"><table><thead><tr><th>Opportunity type</th><th>Count</th></tr></thead><tbody>${commonTypes || '<tr><td colspan="2">No supported missed opportunities.</td></tr>'}</tbody></table></div><h2>Call reviews by agent</h2>${agentSections || "<p>No missed-opportunity analyses are available.</p>"}</div><script>(function(){function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}var state={};document.querySelectorAll('.transcript').forEach(function(t){state[t.id]={raw:t.textContent||'',active:0,matches:[]}});function paint(id,q){var t=document.getElementById(id),s=state[id],count=document.querySelector('[data-count="'+id+'"]');if(!t||!s)return;if(!q){s.matches=[];t.textContent=s.raw;if(count)count.textContent='0 matches';return}var rx=new RegExp(q.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&'),'gi'),i=0;s.matches=[];t.innerHTML=esc(s.raw).replace(rx,function(m){var cls=i===s.active?' active':'';s.matches.push(i++);return '<mark class="'+cls.trim()+'">'+esc(m)+'</mark>'});if(count)count.textContent=s.matches.length?((s.active+1)+'/'+s.matches.length+' matches'):'0 matches'}document.querySelectorAll('.search').forEach(function(input){input.addEventListener('input',function(){var id=input.dataset.target;state[id].active=0;paint(id,input.value)})});document.querySelectorAll('[data-prev],[data-next]').forEach(function(btn){btn.addEventListener('click',function(){var id=btn.getAttribute('data-prev')||btn.getAttribute('data-next'),input=document.querySelector('[data-target="'+id+'"]'),s=state[id];if(!input||!s||!s.matches.length)return;s.active=(s.active+(btn.hasAttribute('data-prev')?-1:1)+s.matches.length)%s.matches.length;paint(id,input.value)})})})();</script></body></html>`;
+}
+
 export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [view, setView] = useState<AppView>("jobs");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -1131,6 +1219,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [transcriptionModel, setTranscriptionModel] = useState(DEFAULT_TRANSCRIPTION_MODEL);
   const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("qa");
   const [editingScorecardId, setEditingScorecardId] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1141,6 +1230,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
 
   const results = useMemo(() => jobs.flatMap((job) => job.results.map((result) => ({ job, result }))), [jobs]);
   const selected = results.find((item) => item.result.result_id === selectedResultId) ?? results[0];
+  const reportableResults = results.filter(({ result }) => analysisMode === "qa"
+    ? Boolean(result.qa_overrides?.length || result.analysis.rows?.length)
+    : Boolean(result.missed_opportunity_analysis));
 
   const updateLocation = useCallback((nextView: AppView, resultId = "", mode: "push" | "replace" = "push") => {
     const url = new URL(window.location.href);
@@ -1211,6 +1303,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setTranscriptionModel(validTranscriptionModel(window.localStorage.getItem(TRANSCRIPTION_MODEL_STORAGE) || DEFAULT_TRANSCRIPTION_MODEL));
     setQaModel(validQaModel(window.localStorage.getItem(QA_MODEL_STORAGE) || DEFAULT_QA_MODEL));
     setTheme(window.localStorage.getItem(THEME_STORAGE) === "dark" ? "dark" : "light");
+    setAnalysisMode(normalizeAnalysisMode(window.localStorage.getItem(ANALYSIS_MODE_STORAGE)));
     setStatus(key ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
     setCloudStatus(key ? "Saved key; run connection test" : "No OpenAI key saved");
     setHydrated(true);
@@ -1276,7 +1369,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       const params = new URLSearchParams(window.location.search);
       const requestedView = params.get("view") as AppView | null;
       const validViews: AppView[] = ["jobs", "review", "scorecards", "mirrorcxt", "settings"];
-      const nextView = requestedView && validViews.includes(requestedView) ? requestedView : "jobs";
+      const requestedNextView = requestedView && validViews.includes(requestedView) ? requestedView : "jobs";
+      const nextView = analysisMode === "missed_opportunities" && requestedNextView === "scorecards" ? "jobs" : requestedNextView;
       if (nextView === "review") {
         const requestedResult = params.get("result") || "";
         const match = results.find(({ result }) => result.result_id === requestedResult);
@@ -1292,12 +1386,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         return;
       }
       setView(nextView);
+      if (nextView !== requestedNextView && replaceStale) updateLocation(nextView, "", "replace");
     };
     applyUrl(true);
     const onPopState = () => applyUrl(true);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [hydrated, results, updateLocation]);
+  }, [analysisMode, hydrated, results, updateLocation]);
 
   async function upload() {
     if (!files?.length || !scorecards) return;
@@ -1351,63 +1446,114 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         });
         const transcriptPayload = await transcribeDirect(file, cleanApiKey(openaiApiKey), transcriptionModel);
         const gradingStarted = Date.now();
-        const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
         const localIdentity = transcriptIdentity(transcriptPayload.transcript);
-        let qaIdentity = { ...localIdentity };
         let transfer = normalizeTransfer(undefined, transcriptPayload.transcript, transcriptPayload.duration);
-        let rows = ruleAnalysis.rows;
-        let source = transcriptPayload.chunked
-          ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
-          : "OpenAI transcription via Vercel relay + browser rule scanner";
-        if (transcriptPayload.model_fallback) source += ` | ${transcriptPayload.model_fallback}`;
+        const resultId = uuid();
         let report = "";
-        try {
+        let result: JobResult;
+        if (analysisMode === "missed_opportunities") {
           update({
-            message: `Running QA review for ${file.name} (${index + 1} of ${selectedFiles.length})...`,
+            message: `Checking missed opportunities for ${file.name} (${index + 1} of ${selectedFiles.length})...`,
             progress: (index + 0.65) / selectedFiles.length,
             percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
           });
-          const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
-          qaIdentity = {
-            agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
-            customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
-            customer_phone: qa.customer_phone || localIdentity.customer_phone,
-          };
-          transfer = normalizeTransfer(qa.transfer, transcriptPayload.transcript, transcriptPayload.duration);
-          if (Array.isArray(qa.rows) && qa.rows.length) {
-            rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
-            source = transcriptPayload.chunked
-              ? `OpenAI transcription (${transcriptPayload.chunk_count} audio parts) + OpenAI QA via Vercel relay`
-              : "OpenAI transcription + OpenAI QA via Vercel relay";
+          let opportunityAnalysis: MissedOpportunityAnalysis;
+          try {
+            opportunityAnalysis = await missedOpportunityDirect({
+              transcript: transcriptPayload.transcript,
+              callId: resultId,
+              apiKey: cleanApiKey(openaiApiKey),
+              model: qaModel,
+              transferOccurred: transfer.occurred,
+            });
+          } catch (caught) {
+            report = makeErrorReport("Missed-opportunity analysis request", caught, {
+              model: qaModel,
+              transcript_characters: transcriptPayload.transcript.length,
+            });
+            opportunityAnalysis = finalizeMissedOpportunityAnalysis({
+              transcript: transcriptPayload.transcript,
+              callId: resultId,
+              selectedModel: qaModel,
+              raw: { findings: [] },
+              transferOccurred: transfer.occurred,
+            });
           }
-        } catch (caught) {
-          report = makeErrorReport("Cloud QA model request; browser rule scanner was used", caught, {
-            model: qaModel,
-            transcript_characters: transcriptPayload.transcript.length,
-            scorecard: ruleAnalysis.entry.name,
-          });
+          result = {
+            result_id: resultId,
+            analysis_mode: "missed_opportunities",
+            file_name: file.name,
+            file_size_bytes: file.size,
+            transcript_text: transcriptPayload.transcript,
+            duration_seconds: transcriptPayload.duration,
+            grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
+            analysis: {
+              source: `OpenAI transcription + missed-opportunity analysis via Vercel relay (${qaModel})`,
+              agent_name: titleCaseName(opportunityAnalysis.identity?.agentName || localIdentity.agent_name),
+              customer_name: titleCaseName(opportunityAnalysis.identity?.customerName || localIdentity.customer_name),
+              customer_phone: opportunityAnalysis.identity?.customerPhone || localIdentity.customer_phone,
+              transfer,
+            },
+            missed_opportunity_analysis: opportunityAnalysis,
+            llm_error_report: report,
+          };
+        } else {
+          const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
+          let qaIdentity = { ...localIdentity };
+          let rows = ruleAnalysis.rows;
+          let source = transcriptPayload.chunked
+            ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
+            : "OpenAI transcription via Vercel relay + browser rule scanner";
+          if (transcriptPayload.model_fallback) source += ` | ${transcriptPayload.model_fallback}`;
+          try {
+            update({
+              message: `Running QA review for ${file.name} (${index + 1} of ${selectedFiles.length})...`,
+              progress: (index + 0.65) / selectedFiles.length,
+              percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
+            });
+            const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
+            qaIdentity = {
+              agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
+              customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
+              customer_phone: qa.customer_phone || localIdentity.customer_phone,
+            };
+            transfer = normalizeTransfer(qa.transfer, transcriptPayload.transcript, transcriptPayload.duration);
+            if (Array.isArray(qa.rows) && qa.rows.length) {
+              rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
+              source = transcriptPayload.chunked
+                ? `OpenAI transcription (${transcriptPayload.chunk_count} audio parts) + OpenAI QA via Vercel relay`
+                : "OpenAI transcription + OpenAI QA via Vercel relay";
+            }
+          } catch (caught) {
+            report = makeErrorReport("Cloud QA model request; browser rule scanner was used", caught, {
+              model: qaModel,
+              transcript_characters: transcriptPayload.transcript.length,
+              scorecard: ruleAnalysis.entry.name,
+            });
+          }
+          result = {
+            result_id: resultId,
+            analysis_mode: "qa",
+            file_name: file.name,
+            file_size_bytes: file.size,
+            transcript_text: transcriptPayload.transcript,
+            duration_seconds: transcriptPayload.duration,
+            grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
+            analysis: {
+              client: ruleAnalysis.client,
+              scorecard_name: ruleAnalysis.entry.name,
+              source,
+              rows,
+              agent_name: qaIdentity.agent_name,
+              customer_name: qaIdentity.customer_name,
+              customer_phone: qaIdentity.customer_phone,
+              transfer,
+            },
+            qa_overrides: editorRows(rows),
+            metrics: metrics(rows),
+            llm_error_report: report,
+          };
         }
-        const result: JobResult = {
-          result_id: uuid(),
-          file_name: file.name,
-          file_size_bytes: file.size,
-          transcript_text: transcriptPayload.transcript,
-          duration_seconds: transcriptPayload.duration,
-          grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
-          analysis: {
-            client: ruleAnalysis.client,
-            scorecard_name: ruleAnalysis.entry.name,
-            source,
-            rows,
-            agent_name: qaIdentity.agent_name,
-            customer_name: qaIdentity.customer_name,
-            customer_phone: qaIdentity.customer_phone,
-            transfer,
-          },
-          qa_overrides: editorRows(rows),
-          metrics: metrics(rows),
-          llm_error_report: report,
-        };
         nextJobs = nextJobs.map((candidate) =>
           candidate.job_id === job.job_id
             ? {
@@ -1464,6 +1610,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       const localIdentity = transcriptIdentity(target.transcript_text);
       const updated: JobResult = {
         ...target,
+        analysis_mode: "qa",
         grading_revision: (target.grading_revision ?? 0) + 1,
         grading_seconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
         analysis: {
@@ -1500,6 +1647,87 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function analyzeMissedOpportunities(jobId: string, resultId: string, force = false) {
+    const target = jobs.find((job) => job.job_id === jobId)?.results.find((result) => result.result_id === resultId);
+    const key = cleanApiKey(openaiApiKey);
+    if (!target) {
+      setError("The selected call is no longer available.");
+      return false;
+    }
+    if (!key) {
+      setError("Save an OpenAI API key in Settings before analyzing missed opportunities.");
+      return false;
+    }
+    const cacheKey = createOpportunityCacheKey(target.transcript_text, qaModel);
+    if (!force && target.missed_opportunity_analysis?.cacheKey === cacheKey) {
+      setStatus("The saved missed-opportunity analysis is already current for this transcript and model.");
+      return true;
+    }
+    setBusy(true);
+    setError("");
+    setStatus(`Analyzing missed opportunities in ${target.file_name}...`);
+    const started = Date.now();
+    try {
+      const analysis = await missedOpportunityDirect({
+        transcript: target.transcript_text,
+        callId: target.result_id,
+        apiKey: key,
+        model: qaModel,
+        previous: target.missed_opportunity_analysis?.findings,
+        transferOccurred: target.analysis.transfer?.occurred,
+      });
+      const localIdentity = transcriptIdentity(target.transcript_text);
+      const updated: JobResult = {
+        ...target,
+        analysis_mode: "missed_opportunities",
+        missed_opportunity_revision: (target.missed_opportunity_revision ?? 0) + 1,
+        grading_seconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
+        analysis: {
+          ...target.analysis,
+          source: `Missed-opportunity analysis via Vercel relay (${qaModel})`,
+          agent_name: titleCaseName(analysis.identity?.agentName || target.analysis.agent_name || localIdentity.agent_name),
+          customer_name: titleCaseName(analysis.identity?.customerName || target.analysis.customer_name || localIdentity.customer_name),
+          customer_phone: analysis.identity?.customerPhone || target.analysis.customer_phone || localIdentity.customer_phone,
+        },
+        missed_opportunity_analysis: analysis,
+        llm_error_report: "",
+      };
+      persistJobs(jobs.map((job) => job.job_id === jobId
+        ? { ...job, results: job.results.map((result) => result.result_id === resultId ? updated : result) }
+        : job));
+      setStatus(`Missed-opportunity analysis complete: ${analysis.summary.total} supported finding${analysis.summary.total === 1 ? "" : "s"}.`);
+      return true;
+    } catch (caught) {
+      setError(makeErrorReport("Missed-opportunity analysis request", caught, {
+        file: target.file_name,
+        model: qaModel,
+        transcript_characters: target.transcript_text.length,
+      }));
+      setStatus("Missed-opportunity analysis failed; the previous result was left unchanged.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateMissedOpportunity(jobId: string, resultId: string, findingId: string, patch: Partial<Pick<MissedOpportunity, "status" | "reviewerNotes">>) {
+    setJobs((current) => {
+      const next = current.map((job) => {
+        if (job.job_id !== jobId) return job;
+        return {
+          ...job,
+          results: job.results.map((result) => {
+            if (result.result_id !== resultId || !result.missed_opportunity_analysis) return result;
+            const findings = result.missed_opportunity_analysis.findings.map((finding) => finding.id === findingId ? { ...finding, ...patch } : finding);
+            return { ...result, missed_opportunity_analysis: { ...result.missed_opportunity_analysis, findings, summary: summarizeMissedOpportunities(findings) } };
+          }),
+        };
+      });
+      window.localStorage.setItem(JOB_STORAGE, JSON.stringify(next));
+      return next;
+    });
   }
 
   function removeJob(jobId: string) {
@@ -1621,9 +1849,22 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   }
 
   function exportReport() {
-    const html = makeReport(results.map((item) => item.result), mirrorLeads);
+    const html = analysisMode === "missed_opportunities"
+      ? makeMissedOpportunityReport(reportableResults.map((item) => item.result), mirrorLeads)
+      : makeReport(reportableResults.map((item) => item.result), mirrorLeads);
     setReportHtml(html);
-    setStatus("Report generated in browser.");
+    setStatus(`${analysisMode === "qa" ? "QA" : "Missed opportunities"} report generated in browser.`);
+  }
+
+  function changeAnalysisMode(nextMode: AnalysisMode) {
+    setAnalysisMode(nextMode);
+    window.localStorage.setItem(ANALYSIS_MODE_STORAGE, nextMode);
+    setReportHtml("");
+    setError("");
+    if (nextMode === "missed_opportunities" && view === "scorecards") navigateToView("jobs");
+    setStatus(nextMode === "qa"
+      ? "QA Mode active. Booked calls use client-specific scorecards."
+      : "Missed Opportunities Mode active. Non-booked calls use universal opportunity analysis.");
   }
 
   function saveOpenAiKey() {
@@ -1714,13 +1955,17 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const navItems: { id: AppView; label: string; icon: typeof AudioLines }[] = [
     { id: "jobs", label: "Jobs", icon: AudioLines },
     { id: "review", label: "Review", icon: ClipboardCheck },
-    { id: "scorecards", label: "Scorecards", icon: Library },
+    ...(analysisMode === "qa" ? [{ id: "scorecards" as AppView, label: "Scorecards", icon: Library }] : []),
     { id: "mirrorcxt", label: "MirrorCXT", icon: Users },
     { id: "settings", label: "Settings", icon: Settings },
   ];
   const viewMeta: Record<AppView, { title: string; description: string }> = {
-    jobs: { title: "Call processing", description: "Upload recordings, monitor live progress, and open completed QA reviews." },
-    review: { title: "QA review", description: "Verify evidence, adjust qualifier decisions, and finalize each call." },
+    jobs: analysisMode === "qa"
+      ? { title: "Call processing", description: "Upload recordings, monitor live progress, and open completed QA reviews." }
+      : { title: "Opportunity processing", description: "Analyze non-booked calls for conservative, transcript-supported coaching opportunities." },
+    review: analysisMode === "qa"
+      ? { title: "QA review", description: "Verify evidence, adjust qualifier decisions, and finalize each call." }
+      : { title: "Missed opportunity review", description: "Review supported findings, dismiss false positives, and record coaching follow-up." },
     scorecards: { title: "Scorecard library", description: "Manage client detection and build plain-language grading rubrics." },
     mirrorcxt: { title: "MirrorCXT matching", description: "Import saved leads to add customer context and Clover links to matching calls." },
     settings: { title: "Workspace settings", description: "Manage appearance, cloud AI access, models, and browser-stored data." },
@@ -1754,11 +1999,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           {cloudCheckedAt && <p>Last checked {cloudCheckedAt}</p>}
           <button onClick={testOpenAiConnection} disabled={busy || !cleanApiKey(openaiApiKey)}><RefreshCw size={15} /> Test connection</button>
         </section>
-        <section className="side-card status-card">
+        {analysisMode === "qa" && <section className="side-card status-card">
           <div className="side-card-title"><ShieldCheck size={16} /><span>Scorecards</span></div>
           <strong>{scorecards?.scorecards.length ?? 0} loaded</strong>
           <p>{scorecards?.required_clients_available ? "Required client library ready." : "Required client check pending."}</p>
-        </section>
+        </section>}
         <section className="side-card hours-saved-card" title="One hour is credited for each hour of completed call audio processed by CompassAi.">
           <div className="side-card-title"><Clock3 size={16} /><span>Time saved</span></div>
           <strong>Hours saved, using CompassAi: {(hoursSavedSeconds / 3600).toFixed(1)}</strong>
@@ -1768,12 +2013,18 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       <main>
         <header className="topbar">
           <button className="icon-button menu-button" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
-          <div>
-            <span className="eyebrow">CompassAi QA workstation</span>
+          <div className="topbar-copy">
+            <span className="eyebrow">CompassAi {analysisMode === "qa" ? "QA workstation" : "sales coaching"}</span>
             <h2>{viewMeta[view].title}</h2>
             <p>{viewMeta[view].description}</p>
           </div>
-          <button className="topbar-action" onClick={refresh} disabled={busy}><RefreshCw size={16} /> Refresh</button>
+          <div className="topbar-controls">
+            <div className="mode-switch" role="group" aria-label="Analysis mode">
+              <button data-testid="mode-qa" className={analysisMode === "qa" ? "active" : ""} onClick={() => changeAnalysisMode("qa")} disabled={busy}><ClipboardCheck size={16} /> QA</button>
+              <button data-testid="mode-opportunities" className={analysisMode === "missed_opportunities" ? "active" : ""} onClick={() => changeAnalysisMode("missed_opportunities")} disabled={busy}><Target size={16} /> Missed Opportunities</button>
+            </div>
+            <button className="topbar-action" onClick={refresh} disabled={busy}><RefreshCw size={16} /> Refresh</button>
+          </div>
         </header>
         {status && <div className="notice status-notice" role="status"><CheckCircle2 size={17} /><span>{status}</span></div>}
         {error && <div className="notice error">{error}</div>}
@@ -1782,7 +2033,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <section className="panel upload-panel">
               <div className="section-heading">
                 <div className="section-icon"><Upload size={20} /></div>
-                <div><h3>Add recordings</h3><p>Choose one or more audio or video files. Each call is detected and graded independently.</p></div>
+                <div><h3>Add recordings</h3><p>{analysisMode === "qa" ? "Each call is detected and graded independently with its matching scorecard." : "Each non-booked call is checked independently for genuine, recoverable sales opportunities."}</p></div>
               </div>
               <div className="drop">
                 <input aria-label="Choose call recordings" type="file" multiple accept="audio/*,video/*" onChange={(event) => setFiles(event.target.files)} />
@@ -1801,19 +2052,20 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               mirrorLeads={mirrorLeads}
               clearJobs={clearJobs}
               busy={busy}
+              analysisMode={analysisMode}
             />
             <section className="panel report-workspace">
               <div className="section-heading report-heading">
                 <div className="section-icon"><FileOutput size={20} /></div>
-                <div><h3>Final report</h3><p>{results.length} completed call(s) available for the styled batch report.</p></div>
-                <button className="primary" disabled={!results.length || busy} onClick={exportReport}><FileOutput size={17} /> Generate report</button>
+                <div><h3>{analysisMode === "qa" ? "Final QA report" : "Opportunity report"}</h3><p>{reportableResults.length} analyzed call(s) available for the styled {analysisMode === "qa" ? "QA" : "coaching"} report.</p></div>
+                <button className="primary" disabled={!reportableResults.length || busy} onClick={exportReport}><FileOutput size={17} /> Generate report</button>
               </div>
-              {reportHtml && <div className="report-actions"><a className="download-link" download={`CompassAi_QA_Report_${new Date().toISOString().slice(0, 10)}.html`} href={`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`}><Download size={16} /> Download styled HTML report</a></div>}
+              {reportHtml && <div className="report-actions"><a className="download-link" download={`CompassAi_${analysisMode === "qa" ? "QA" : "Missed_Opportunities"}_Report_${new Date().toISOString().slice(0, 10)}.html`} href={`data:text/html;charset=utf-8,${encodeURIComponent(reportHtml)}`}><Download size={16} /> Download styled HTML report</a></div>}
               {reportHtml && <iframe title="CompassAi report preview" srcDoc={reportHtml} />}
             </section>
           </>
         )}
-        {view === "review" && (
+        {view === "review" && analysisMode === "qa" && (
           <ReviewPanel
             item={selected}
             allResults={results}
@@ -1828,7 +2080,19 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             regradeResult={regradeResult}
           />
         )}
-        {view === "scorecards" && (
+        {view === "review" && analysisMode === "missed_opportunities" && (
+          <MissedOpportunityReviewPanel
+            item={selected}
+            allResults={results}
+            select={openReview}
+            headingRef={reviewHeadingRef}
+            mirrorLeads={mirrorLeads}
+            busy={busy}
+            analyze={analyzeMissedOpportunities}
+            updateFinding={updateMissedOpportunity}
+          />
+        )}
+        {view === "scorecards" && analysisMode === "qa" && (
           <section className="panel screen-panel scorecard-screen">
             <div className="panel-title">
               <div>
@@ -1984,7 +2248,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                   {TRANSCRIPTION_MODELS.map((model) => <option key={model}>{model}</option>)}
                 </select>
               </label>
-              <label>QA model:
+              <label>{analysisMode === "qa" ? "QA model:" : "Opportunity analysis model:"}
                 <select value={qaModel} onChange={(event) => setQaModel(event.target.value)}>
                   {QA_MODELS.map((model) => <option key={model}>{model}</option>)}
                 </select>
@@ -2002,7 +2266,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <div className="settings-grid">
               <div><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
               <div><strong>{transcriptionModel}</strong><p>Used for audio transcription through CompassAi's same-origin relay.</p></div>
-              <div><strong>{qaModel}</strong><p>Used for QA grading, evidence review, and context interpretation.</p></div>
+              <div><strong>{qaModel}</strong><p>Used for {analysisMode === "qa" ? "QA grading and evidence review" : "missed-opportunity context analysis"}.</p></div>
               <div><span>Cloud LLM Status</span><strong>{cloudStatus}</strong><p>{cloudCheckedAt ? `Last checked ${cloudCheckedAt}.` : "Use Test OpenAI connection for live API status."}</p></div>
               <div><span>Appearance</span><strong>{theme === "dark" ? "Dark mode" : "Light mode"}</strong><p>Saved locally for this browser.</p></div>
             </div>
@@ -2022,6 +2286,7 @@ function JobList({
   mirrorLeads,
   clearJobs,
   busy,
+  analysisMode,
 }: {
   jobs: Job[];
   selectedResultId: string;
@@ -2031,6 +2296,7 @@ function JobList({
   mirrorLeads: MirrorLead[];
   clearJobs: () => void;
   busy: boolean;
+  analysisMode: AnalysisMode;
 }) {
   const processing = jobs.filter((job) => job.status === "queued" || job.status === "running");
   const failed = jobs.filter((job) => job.status === "failed");
@@ -2067,26 +2333,31 @@ function JobList({
       <section className="panel queue-section" aria-labelledby="completed-heading">
         <div className="section-heading compact queue-heading">
           <div className="section-icon"><CheckCircle2 size={19} /></div>
-          <div><h3 id="completed-heading">Completed calls</h3><p>{completed.length} call{completed.length === 1 ? "" : "s"} ready to review</p></div>
+          <div><h3 id="completed-heading">Completed calls</h3><p>{completed.length} call{completed.length === 1 ? "" : "s"} ready for {analysisMode === "qa" ? "QA review" : "opportunity review"}</p></div>
           <button onClick={clearJobs} disabled={busy || !jobs.length}><Trash2 size={16} /> Clear all</button>
         </div>
         {completed.length === 0 ? (
-          <div className="empty-state"><FileAudio size={28} /><strong>No completed calls yet</strong><p>Processed calls will appear here as individual QA cards.</p></div>
+          <div className="empty-state"><FileAudio size={28} /><strong>No completed calls yet</strong><p>Processed calls will appear here as individual {analysisMode === "qa" ? "QA" : "opportunity"} cards.</p></div>
         ) : (
           <div className="completed-grid">
             {completed.map(({ job, result }) => {
               const meta = callMeta(result, mirrorLeads);
               const score = result.metrics?.qa_score ?? 0;
               const outcome = result.metrics?.outcome || "Needs review";
+              const opportunity = result.missed_opportunity_analysis;
+              const opportunityCount = opportunity?.summary.total ?? 0;
+              const highCount = opportunity?.summary.highSeverityCount ?? 0;
               return (
                 <article key={result.result_id} data-testid={`completed-call-${result.result_id}`} className={`completed-card ${selectedResultId === result.result_id ? "selected" : ""}`}>
-                  <button className="completed-card-main" onClick={() => openReview(result.result_id)} aria-label={`Review QA for ${result.file_name}`}>
+                  <button className="completed-card-main" onClick={() => openReview(result.result_id)} aria-label={`Review ${analysisMode === "qa" ? "QA" : "missed opportunities"} for ${result.file_name}`}>
                     <div className="completed-card-top">
-                      <span className={`score-orb ${score >= 80 ? "pass" : score >= 60 ? "review" : "fail"}`}>{score}%</span>
-                      <div className="completed-title"><strong>{result.file_name}</strong><span>{result.analysis.client || "Unknown client"} · {result.analysis.scorecard_name || "No scorecard"}</span></div>
+                      {analysisMode === "qa"
+                        ? <span className={`score-orb ${score >= 80 ? "pass" : score >= 60 ? "review" : "fail"}`}>{score}%</span>
+                        : <span className={`score-orb ${highCount ? "fail" : opportunityCount ? "review" : "pass"}`}>{opportunity ? opportunityCount : "–"}</span>}
+                      <div className="completed-title"><strong>{result.file_name}</strong><span>{analysisMode === "qa" ? `${result.analysis.client || "Unknown client"} · ${result.analysis.scorecard_name || "No scorecard"}` : opportunity ? `${opportunity.disposition.value.replaceAll("_", " ")} · ${opportunity.selectedModel}` : "Ready for opportunity analysis"}</span></div>
                       <ChevronRight size={20} />
                     </div>
-                    <div className="card-tags"><span>{outcome}</span>{meta.clover && <span className="matched">Clover matched</span>}</div>
+                    <div className="card-tags">{analysisMode === "qa" ? <span>{outcome}</span> : <><span>{opportunityCount} supported finding{opportunityCount === 1 ? "" : "s"}</span>{highCount > 0 && <span className="severity-high">{highCount} high severity</span>}</>}{meta.clover && <span className="matched">Clover matched</span>}</div>
                     <dl className="call-facts">
                       <div><dt>Agent</dt><dd>{meta.agent || "Not detected"}</dd></div>
                       <div><dt>Customer</dt><dd>{meta.customer || "Not matched"}</dd></div>
@@ -2094,7 +2365,7 @@ function JobList({
                       <div><dt>Call time</dt><dd>{fmtSeconds(result.duration_seconds)}</dd></div>
                       <div><dt>Grading</dt><dd>{fmtSeconds(result.grading_seconds)}</dd></div>
                     </dl>
-                    <span className="review-cta">Review QA <ChevronRight size={16} /></span>
+                    <span className="review-cta">Review {analysisMode === "qa" ? "QA" : "opportunities"} <ChevronRight size={16} /></span>
                   </button>
                   <div className="completed-card-actions">
                     {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
@@ -2114,6 +2385,108 @@ function JobList({
         </section>
       )}
     </div>
+  );
+}
+
+function MissedOpportunityReviewPanel({
+  item,
+  allResults,
+  select,
+  headingRef,
+  mirrorLeads,
+  busy,
+  analyze,
+  updateFinding,
+}: {
+  item?: { job: Job; result: JobResult };
+  allResults: { job: Job; result: JobResult }[];
+  select: (id: string) => void;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  mirrorLeads: MirrorLead[];
+  busy: boolean;
+  analyze: (jobId: string, resultId: string, force?: boolean) => Promise<boolean>;
+  updateFinding: (jobId: string, resultId: string, findingId: string, patch: Partial<Pick<MissedOpportunity, "status" | "reviewerNotes">>) => void;
+}) {
+  const [typeFilter, setTypeFilter] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [confidenceFilter, setConfidenceFilter] = useState(.78);
+  const [search, setSearch] = useState("");
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    setTypeFilter("");
+    setSeverityFilter("");
+    setStatusFilter("");
+    setSearch("");
+    setActive(0);
+  }, [item?.result.result_id, item?.result.missed_opportunity_revision]);
+
+  const matches = useMemo(() => {
+    if (!item || !search.trim()) return [] as number[];
+    const haystack = item.result.transcript_text.toLowerCase();
+    const needle = search.toLowerCase();
+    const positions: number[] = [];
+    let index = 0;
+    while ((index = haystack.indexOf(needle, index)) >= 0) {
+      positions.push(index);
+      index += Math.max(needle.length, 1);
+    }
+    return positions;
+  }, [item, search]);
+
+  if (!item) return <section className="panel"><h3>Missed opportunity review</h3><p>No completed calls yet.</p></section>;
+  const result = item.result;
+  const analysis = result.missed_opportunity_analysis;
+  const meta = callMeta(result, mirrorLeads);
+  const selectedIndex = Math.max(0, allResults.findIndex(({ result: candidate }) => candidate.result_id === result.result_id));
+  const previous = allResults[selectedIndex - 1]?.result;
+  const next = allResults[selectedIndex + 1]?.result;
+  const findings = analysis ? filterMissedOpportunities(analysis.findings, {
+    type: typeFilter,
+    severity: severityFilter,
+    status: statusFilter,
+    minimumConfidence: confidenceFilter,
+  }) : [];
+  const types = Array.from(new Set(analysis?.findings.map((finding) => finding.type) ?? [])).sort();
+
+  return (
+    <section className="review-workstation opportunity-workstation">
+      <aside className="review-rail" aria-label="Completed calls">
+        <div className="review-rail-head"><div><strong>Opportunity queue</strong><span>{selectedIndex + 1} of {allResults.length}</span></div><div className="rail-nav"><button className="icon-button" aria-label="Previous call" disabled={!previous} onClick={() => previous && select(previous.result_id)}><ChevronLeft size={17} /></button><button className="icon-button" aria-label="Next call" disabled={!next} onClick={() => next && select(next.result_id)}><ChevronRight size={17} /></button></div></div>
+        <div className="review-call-list">
+          {allResults.map(({ result: candidate }) => {
+            const candidateAnalysis = candidate.missed_opportunity_analysis;
+            return <button key={candidate.result_id} data-testid={`opportunity-call-${candidate.result_id}`} className={candidate.result_id === result.result_id ? "active" : ""} onClick={() => select(candidate.result_id)}><div><strong>{candidate.file_name}</strong><span className="rail-score">{candidateAnalysis ? candidateAnalysis.summary.total : "–"}</span></div><span>{candidateAnalysis ? candidateAnalysis.disposition.value.replaceAll("_", " ") : "Not analyzed"}</span><small>{candidateAnalysis ? `${candidateAnalysis.summary.highSeverityCount} high severity` : "Open to analyze"}</small></button>;
+          })}
+        </div>
+      </aside>
+      <div className="review-main">
+        <div className="review-toolbar">
+          <div className="review-identity"><span className="eyebrow">Selected non-booked call</span><h3 ref={headingRef} tabIndex={-1} data-testid="opportunity-review-heading">{result.file_name}</h3><p>{meta.agent || "Agent not detected"} · {analysis ? analysis.disposition.reason : "No missed-opportunity analysis saved yet."}</p></div>
+          <div className="review-toolbar-actions"><span className="save-state">Review changes save in this browser</span><button className="primary" data-testid="run-opportunity-analysis" disabled={busy} onClick={() => analyze(item.job.job_id, result.result_id, Boolean(analysis))}>{busy ? <><RefreshCw className="spinning" size={16} /> Analyzing...</> : <><Target size={16} /> {analysis ? "Re-run analysis" : "Analyze transcript"}</>}</button></div>
+        </div>
+        <div className="review-summary opportunity-summary">
+          <div><span>Supported findings</span><strong>{analysis?.summary.total ?? "Not analyzed"}</strong></div>
+          <div><span>High severity</span><strong>{analysis?.summary.highSeverityCount ?? "–"}</strong></div>
+          <div><span>Disposition</span><strong>{analysis?.disposition.value.replaceAll("_", " ") ?? "Pending"}</strong></div>
+          <div><span>Agent</span><strong>{meta.agent || "Not detected"}</strong></div>
+          <div><span>Model</span><strong>{analysis?.selectedModel || "Not run"}</strong></div>
+          {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
+        </div>
+        {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
+        {!analysis ? <div className="opportunity-empty"><Target size={30} /><h4>Analyze the saved transcript</h4><p>CompassAi will inspect likely objection windows and return only transcript-supported missed opportunities. The recording will not be transcribed again.</p><button className="primary" disabled={busy} onClick={() => analyze(item.job.job_id, result.result_id)}><Target size={16} /> Analyze missed opportunities</button></div> : (
+          <div className="opportunity-review-grid">
+            <div className="opportunity-findings">
+              <div className="opportunity-filters"><label>Type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option>{types.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label><label>Severity<select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value="">All severities</option>{["high", "medium", "low"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{["open", "reviewed", "dismissed", "coached"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Confidence <span>{Math.round(confidenceFilter * 100)}%+</span><input type="range" min="0.5" max="1" step="0.01" value={confidenceFilter} onChange={(event) => setConfidenceFilter(Number(event.target.value))} /></label></div>
+              <div className="finding-count"><strong>{findings.length}</strong> of {analysis.findings.length} findings shown · {analysis.candidateCount} candidate window{analysis.candidateCount === 1 ? "" : "s"} checked</div>
+              {findings.length ? findings.map((finding) => <article className={`opportunity-card ${finding.severity}`} key={finding.id} data-testid={`opportunity-${finding.id}`}><header><div><span className="eyebrow">{finding.type.replaceAll("_", " ")}</span><h4>{finding.title}</h4></div><div className="opportunity-badges"><span>{finding.severity}</span><strong>{Math.round(finding.confidence * 100)}%</strong></div></header><p>{finding.summary}</p><div className="opportunity-evidence"><div><span>Customer trigger {finding.customerTrigger.startTime !== undefined ? `· ${reportTime(finding.customerTrigger.startTime)}` : ""}</span><blockquote>{finding.customerTrigger.text}</blockquote></div><div><span>Agent response {finding.agentResponse.startTime !== undefined ? `· ${reportTime(finding.agentResponse.startTime)}` : ""}</span><blockquote>{finding.agentResponse.text}</blockquote></div></div><div className="coaching-box"><strong>Expected action</strong><p>{finding.expectedAction}</p>{finding.suggestedResponse && <><strong>Example response</strong><p>{finding.suggestedResponse}</p></>}</div><div className="finding-review"><label>Review status<select value={finding.status} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { status: event.target.value as MissedOpportunity["status"] })}>{["open", "reviewed", "dismissed", "coached"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Reviewer notes<textarea value={finding.reviewerNotes || ""} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { reviewerNotes: event.target.value })} placeholder="Why this was confirmed, dismissed, or coached..." /></label></div></article>) : <div className="opportunity-empty compact"><CheckCircle2 size={25} /><strong>No findings match these filters</strong><p>{analysis.summary.total ? "Adjust the filters to review other findings." : analysis.disposition.reason}</p></div>}
+            </div>
+            <section className="transcript-panel opportunity-transcript"><div className="pane-heading"><div><h4>Transcript</h4><p>{fmtSeconds(result.duration_seconds)} call time</p></div></div><div className="searchbar"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transcript" /><button disabled={!matches.length} onClick={() => setActive((active + matches.length - 1) % matches.length)}>Previous</button><button disabled={!matches.length} onClick={() => setActive((active + 1) % matches.length)}>Next</button><span>{matches.length ? `${active + 1}/${matches.length}` : "0 matches"}</span></div><pre>{highlight(result.transcript_text, search, active)}</pre></section>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
