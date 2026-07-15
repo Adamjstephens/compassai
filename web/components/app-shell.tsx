@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.6.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -816,7 +816,8 @@ function editorRows(rows: AnalysisRow[]): EditorRow[] {
 function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? [], finalGrade = result.metrics?.final_grade ?? "Approved") {
   const hardenedOverrides = overrides.map((row) => {
     if (!isCriticalCategory(row.Category)) return row;
-    const evidenceIsClear = evidenceIsTranscriptBacked(result.transcript_text, row.Evidence);
+    const evidenceIsClear = evidenceIsTranscriptBacked(result.transcript_text, row.Evidence)
+      && criticalPassPolicySatisfied(row.Qualifier, result.transcript_text);
     const harden = (status: string) => {
       const canonical = canonicalStatus(status);
       return canonical === "Not applicable" || (canonical === "Pass" && !evidenceIsClear) ? "Needs review" : canonical;
