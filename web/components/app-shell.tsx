@@ -136,7 +136,7 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "0.5.9";
+const APP_VERSION = "0.6.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -613,6 +613,19 @@ function evidenceIsTranscriptBacked(transcript: string, evidence: string) {
   return needle.length >= 4 && haystack.includes(needle);
 }
 
+export function criticalPassPolicySatisfied(check: string, transcript: string) {
+  if (ruleKey(check) !== ruleKey("Government Grant Disclosure")) return true;
+  const text = transcript.replace(/\s+/g, " ").trim().toLowerCase();
+  const disclosureStart = text.search(/government\s+(?:assistance|grant|program|aid|fund)|free\s+windows?/i);
+  if (disclosureStart < 0) return false;
+  const disclosure = text.slice(Math.max(0, disclosureStart - 180), disclosureStart + 900);
+  const mentionsProgram = /government\s+(?:assistance|grant|program|aid|fund)|free\s+windows?/.test(disclosure);
+  const statesNonParticipation = /(?:do\s+not|don't|does\s+not|doesn't|not)\s+(?:participate|offer|provide|cover).{0,100}(?:government|free\s+windows?)|(?:government|free\s+windows?).{0,100}(?:not\s+offered|not\s+provided|not\s+covered)/.test(disclosure);
+  const assignsHomeownerCost = /(?:all\s+)?costs?.{0,100}(?:homeowner|customer|you)|(?:homeowner|customer|you).{0,100}(?:responsible|pay|costs?)/.test(disclosure);
+  const customerAcknowledges = /(?:homeowner|customer|you).{0,320}\b(?:yes|yeah|yep|okay|ok|understand|correct|right|that's\s+fine|that\s+is\s+fine)\b/.test(disclosure);
+  return mentionsProgram && statesNonParticipation && assignsHomeownerCost && customerAcknowledges;
+}
+
 export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
   const modelByCheck = new Map(rows.map((row) => [ruleKey(row.check), row]));
   return ruleRows.map((fallback) => {
@@ -622,7 +635,13 @@ export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], tr
     const category = fallback.category || row?.category || "Qualifier";
     let status = canonicalStatus(row?.status || fallback.status);
     const critical = isCriticalCategory(category);
-    if ((critical && status === "Not applicable") || (status === "Pass" && (!evidence.verifiedForPass || (critical && evidence.source !== "model")))) {
+    if (
+      (critical && status === "Not applicable")
+      || (status === "Pass" && (
+        !evidence.verifiedForPass
+        || (critical && (evidence.source !== "model" || !criticalPassPolicySatisfied(fallback.check, transcript)))
+      ))
+    ) {
       status = "Needs review";
     }
     return {
