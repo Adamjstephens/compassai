@@ -67,6 +67,8 @@ const JOB_STORAGE = "compassai.vercelOnly.jobs";
 const TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const QA_MODEL = "gpt-4o-mini";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
+const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
+const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
 
 function uuid() {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -131,6 +133,73 @@ function timeForSnippet(text: string, snippet: string, duration = 0) {
   const ratio = index >= 0 ? index / Math.max(text.length, 1) : 0;
   const seconds = Math.max(0, Math.round(duration * ratio));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function readAscii(bytes: Uint8Array, offset: number, length: number) {
+  return String.fromCharCode(...bytes.slice(offset, offset + length));
+}
+
+function writeAscii(bytes: Uint8Array, offset: number, value: string) {
+  for (let i = 0; i < value.length; i += 1) bytes[offset + i] = value.charCodeAt(i);
+}
+
+function writeUint32(bytes: Uint8Array, offset: number, value: number) {
+  new DataView(bytes.buffer).setUint32(offset, value, true);
+}
+
+function makeWaveFile(fmtChunk: Uint8Array, dataChunk: Uint8Array, name: string) {
+  const fmtPad = fmtChunk.length % 2;
+  const dataPad = dataChunk.length % 2;
+  const total = 12 + 8 + fmtChunk.length + fmtPad + 8 + dataChunk.length + dataPad;
+  const output = new Uint8Array(total);
+  writeAscii(output, 0, "RIFF");
+  writeUint32(output, 4, total - 8);
+  writeAscii(output, 8, "WAVE");
+  writeAscii(output, 12, "fmt ");
+  writeUint32(output, 16, fmtChunk.length);
+  output.set(fmtChunk, 20);
+  const dataHeader = 20 + fmtChunk.length + fmtPad;
+  writeAscii(output, dataHeader, "data");
+  writeUint32(output, dataHeader + 4, dataChunk.length);
+  output.set(dataChunk, dataHeader + 8);
+  return new File([output], name, { type: "audio/wav" });
+}
+
+async function splitWavForVercelRelay(file: File) {
+  if (file.size <= VERCEL_RELAY_CHUNK_BYTES) return { files: [file], duration: 0, chunked: false };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (readAscii(bytes, 0, 4) !== "RIFF" || readAscii(bytes, 8, 4) !== "WAVE") {
+    return { files: [file], duration: 0, chunked: false };
+  }
+
+  let offset = 12;
+  let fmtChunk: Uint8Array | null = null;
+  let dataChunk: Uint8Array | null = null;
+  while (offset + 8 <= bytes.length) {
+    const id = readAscii(bytes, offset, 4);
+    const size = new DataView(bytes.buffer).getUint32(offset + 4, true);
+    const start = offset + 8;
+    const end = Math.min(start + size, bytes.length);
+    if (id === "fmt ") fmtChunk = bytes.slice(start, end);
+    if (id === "data") dataChunk = bytes.slice(start, end);
+    offset = end + (size % 2);
+  }
+
+  if (!fmtChunk || !dataChunk || fmtChunk.length < 16) return { files: [file], duration: 0, chunked: false };
+  const fmtView = new DataView(fmtChunk.buffer, fmtChunk.byteOffset, fmtChunk.byteLength);
+  const sampleRate = fmtView.getUint32(4, true);
+  const blockAlign = Math.max(1, fmtView.getUint16(12, true));
+  const maxData = Math.floor(VERCEL_RELAY_CHUNK_BYTES / blockAlign) * blockAlign;
+  if (maxData <= 0) return { files: [file], duration: 0, chunked: false };
+
+  const stem = file.name.replace(/\.[^.]+$/, "") || "recording";
+  const chunks: File[] = [];
+  for (let start = 0; start < dataChunk.length; start += maxData) {
+    const chunkData = dataChunk.slice(start, Math.min(start + maxData, dataChunk.length));
+    chunks.push(makeWaveFile(fmtChunk, chunkData, `${stem}.part-${String(chunks.length + 1).padStart(2, "0")}.wav`));
+  }
+  const duration = sampleRate ? dataChunk.length / (sampleRate * blockAlign) : 0;
+  return { files: chunks, duration, chunked: chunks.length > 1 };
 }
 
 function pickScorecard(transcript: string, library: ScorecardLibrary) {
@@ -243,32 +312,48 @@ function makeErrorReport(stage: string, error: unknown, extra: Record<string, un
   for (const [key, value] of Object.entries(extra)) {
     if (value !== undefined && value !== "") lines.push(`${key}: ${value}`);
   }
-  lines.push("Likely fix: verify the OpenAI API key, billing, model access, browser CORS/network policy, and use a smaller or compressed audio file.");
+  lines.push("Likely fix: verify the OpenAI API key, billing, model access, and use a smaller or compressed audio file if the Vercel upload relay reports a payload limit.");
   lines.push("Transcript and audio content are intentionally omitted.");
   return lines.join("\n");
 }
 
 async function transcribeDirect(file: File, apiKey: string) {
-  if (file.size > 24 * 1024 * 1024) {
-    throw new Error(`File is ${(file.size / 1024 / 1024).toFixed(1)} MB. Browser-only OpenAI transcription works best below about 24 MB.`);
+  if (file.size > MAX_BROWSER_AUDIO_BYTES) {
+    throw new Error(`File is ${(file.size / 1024 / 1024).toFixed(1)} MB. CompassAi's Vercel-only browser workflow works best below about ${(MAX_BROWSER_AUDIO_BYTES / 1024 / 1024).toFixed(0)} MB.`);
   }
-  const form = new FormData();
-  form.append("model", TRANSCRIPTION_MODEL);
-  form.append("file", file);
-  form.append("response_format", "json");
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: form,
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`OpenAI transcription HTTP ${response.status}: ${text.slice(0, 500)}`);
-  const payload = JSON.parse(text);
-  return { transcript: String(payload.text ?? ""), duration: Number(payload.duration ?? 0) };
+  const prepared = await splitWavForVercelRelay(file);
+  const transcriptParts: string[] = [];
+  let duration = prepared.duration;
+  for (const [index, uploadFile] of prepared.files.entries()) {
+    const form = new FormData();
+    form.append("model", TRANSCRIPTION_MODEL);
+    form.append("file", uploadFile);
+    form.append("response_format", "json");
+    const response = await fetch("/api/openai/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        `CompassAi transcription relay HTTP ${response.status} on part ${index + 1}/${prepared.files.length}: ${text.slice(0, 700)}`,
+      );
+    }
+    const payload = JSON.parse(text);
+    transcriptParts.push(String(payload.text ?? ""));
+    duration += Number(payload.duration ?? 0);
+  }
+  return {
+    transcript: transcriptParts.filter(Boolean).join("\n\n"),
+    duration,
+    chunk_count: prepared.files.length,
+    chunked: prepared.chunked,
+  };
 }
 
 async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: string) {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("/api/openai/chat", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -292,7 +377,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
     }),
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`OpenAI QA HTTP ${response.status}: ${text.slice(0, 500)}`);
+  if (!response.ok) throw new Error(`CompassAi QA relay HTTP ${response.status}: ${text.slice(0, 700)}`);
   const payload = JSON.parse(text);
   return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as { rows?: AnalysisRow[]; notes?: string };
 }
@@ -392,7 +477,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const job: Job = {
       job_id: uuid(),
       status: "running",
-      message: "Starting browser-side processing...",
+      message: "Starting Vercel-side OpenAI processing...",
       progress: 0.02,
       percent: 2,
       source_files: Array.from(files).map((file) => file.name),
@@ -415,7 +500,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         const transcriptPayload = await transcribeDirect(file, openaiApiKey.trim());
         const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
         let rows = ruleAnalysis.rows;
-        let source = "OpenAI transcription + browser rule scanner";
+        let source = transcriptPayload.chunked
+          ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
+          : "OpenAI transcription via Vercel relay + browser rule scanner";
         let report = "";
         try {
           update({ message: `Running cloud QA for ${file.name}...`, progress: (index + 0.65) / files.length, percent: Math.round(((index + 0.65) / files.length) * 100) });
@@ -429,7 +516,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               result: row.result,
               evidence_time: row.evidence_time || "00:00",
             }));
-            source = "OpenAI transcription + OpenAI QA";
+            source = transcriptPayload.chunked
+              ? `OpenAI transcription (${transcriptPayload.chunk_count} audio parts) + OpenAI QA via Vercel relay`
+              : "OpenAI transcription + OpenAI QA via Vercel relay";
           }
         } catch (caught) {
           report = makeErrorReport("Cloud QA model request; browser rule scanner was used", caught, {
@@ -466,7 +555,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       persistJobs(nextJobs);
       setStatus(`Completed ${files.length} file(s).`);
     } catch (caught) {
-      const report = makeErrorReport("Browser transcription workflow", caught, { files: Array.from(files).map((file) => file.name).join(", ") });
+      const report = makeErrorReport("Vercel transcription relay workflow", caught, { files: Array.from(files).map((file) => file.name).join(", ") });
       nextJobs = nextJobs.map((candidate) =>
         candidate.job_id === job.job_id ? { ...candidate, status: "failed", message: "Processing failed.", progress: 1, percent: 100, error_report: report } : candidate,
       );
@@ -545,7 +634,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         <header className="topbar">
           <div>
             <h2>Vercel-Only QA Workspace</h2>
-            <p>Audio, QA, jobs, and reports run in this browser with your OpenAI API key. Keep this tab open while processing.</p>
+            <p>Audio and QA run through CompassAi's Vercel relay using your OpenAI API key. Keep this tab open while processing.</p>
           </div>
           <button onClick={refresh} disabled={busy}>Refresh</button>
         </header>
@@ -601,11 +690,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                 <button className="primary" onClick={saveOpenAiKey}>Save key in this browser</button>
                 <button onClick={clearOpenAiKey}>Clear key</button>
               </div>
-              <p className="hint">Your key stays in this browser's local storage. CompassAi uses it directly from the browser for OpenAI transcription and QA.</p>
+              <p className="hint">Your key stays in this browser's local storage. CompassAi sends it only to its same-origin Vercel relay for OpenAI transcription and QA.</p>
             </div>
             <div className="settings-grid">
               <div><span>Hosting</span><strong>Vercel only</strong><p>No Render, no database, no server-owned OpenAI key.</p></div>
-              <div><span>Transcription</span><strong>{TRANSCRIPTION_MODEL}</strong><p>Large files should be compressed under about 24 MB before upload.</p></div>
+              <div><span>Transcription</span><strong>{TRANSCRIPTION_MODEL}</strong><p>Recordings are sent through CompassAi's same-origin Vercel relay to avoid browser fetch failures.</p></div>
               <div><span>QA model</span><strong>{QA_MODEL}</strong><p>If cloud QA fails, CompassAi falls back to browser rule scanning and shows a copyable error report.</p></div>
             </div>
           </section>
