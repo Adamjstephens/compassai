@@ -8,10 +8,10 @@ services:
     envVars:
       - key: COMPASSAI_JWT_SECRET
         sync: false
-      - key: DATABASE_URL
-        sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: COMPASSAI_FREE_HOSTING_MODE
+        value: "true"
       - key: MAX_FILE_MB
         value: "250"
       - key: MAX_DAILY_AUDIO_MINUTES_PER_USER

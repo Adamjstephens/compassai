@@ -26,11 +26,10 @@ This prints:
 
 Use a fresh generated pair for production. `AUTH_SECRET` goes only in Vercel. `COMPASSAI_JWT_SECRET` must be the same in Vercel and Render.
 
-## Step 2. Render Backend And Database
+## Step 2. Render Backend
 
-Create these in Render:
+Create this in Render:
 
-- A Postgres database
 - A Web Service for the API
 
 Render Web Service settings:
@@ -42,16 +41,16 @@ Render Web Service settings:
 Render API environment variables:
 
 ```text
-DATABASE_URL=<Render Postgres internal/external connection string>
 COMPASSAI_JWT_SECRET=<same generated value used in Vercel>
 ALLOWED_ORIGINS=https://<vercel-domain>
+COMPASSAI_FREE_HOSTING_MODE=true
 MAX_FILE_MB=250
 MAX_DAILY_AUDIO_MINUTES_PER_USER=300
 MAX_CONCURRENT_JOBS_PER_USER=2
 RATE_LIMIT_PER_MINUTE=120
 ```
 
-Do not add `OPENAI_API_KEY` to Render. CompassAi is BYOK: each user provides their own OpenAI key in the app UI.
+Do not add `OPENAI_API_KEY` or `DATABASE_URL` to Render for the free launch. CompassAi is BYOK: each user provides their own OpenAI key in the app UI. The free launch uses temporary service storage, so users should export reports they want to keep.
 
 After Render deploys, copy the API URL. It will look like:
 

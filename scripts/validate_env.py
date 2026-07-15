@@ -19,7 +19,6 @@ WEB_REQUIRED = [
 ]
 
 API_REQUIRED = [
-    "DATABASE_URL",
     "COMPASSAI_JWT_SECRET",
     "ALLOWED_ORIGINS",
     "MAX_FILE_MB",
@@ -76,7 +75,7 @@ def validate(target: str, values: dict[str, str]) -> list[str]:
     if target == "api":
         database_url = values.get("DATABASE_URL", "")
         if database_url and not database_url.startswith(("postgres://", "postgresql://")):
-            errors.append("DATABASE_URL should be a Postgres connection string for production.")
+            errors.append("DATABASE_URL should be a Postgres connection string when provided.")
         for key in ["MAX_FILE_MB", "MAX_DAILY_AUDIO_MINUTES_PER_USER", "MAX_CONCURRENT_JOBS_PER_USER", "RATE_LIMIT_PER_MINUTE"]:
             value = values.get(key, "")
             if value and (not value.isdigit() or int(value) <= 0):

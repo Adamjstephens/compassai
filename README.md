@@ -7,7 +7,7 @@ CompassAi is the secure online sister app for CompassQA Transcriber. It keeps th
 - Microsoft Entra SSO with domain allowlist
 - Bring-your-own OpenAI API key for transcription and QA
 - Scorecards seeded from `compassai/shared/qa_scorecards.json`
-- SQLite for local development and Postgres for production when `DATABASE_URL` is set
+- SQLite/session storage by default, with optional Postgres only if a paid persistent database is added later
 
 ## Security Defaults
 
@@ -72,7 +72,8 @@ Vercel env vars:
 
 Render env vars:
 
-- `DATABASE_URL` reserved for production database migration
+- `DATABASE_URL` is optional. Leave it unset for the 100% free no-payment deployment.
+- Free no-payment hosting uses temporary service storage. Export reports you need to keep.
 - `COMPASSAI_JWT_SECRET`
 - `ALLOWED_ORIGINS`
 - `MAX_FILE_MB`
