@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { compactLlmRubric, isPhoneConfirmationCriterion, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration, verifiedEvidenceOrFallback } from "../lib/qa-safety.ts";
+import { compactLlmRubric, isPhoneConfirmationCriterion, JPC_REPAIR_ROOF_AGE_RULE, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration, verifiedEvidenceOrFallback } from "../lib/qa-safety.ts";
 
 test("scorecard cleanup removes prohibited, duplicate, and same-day instructions", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ bundle: {
@@ -114,6 +114,97 @@ test("Pella project size uses concise LLM instructions while retaining fallback 
   assert.equal(patterns.some((pattern) => pattern.test("They want 27 windows")), true);
   assert.equal(patterns.some((pattern) => pattern.test("We need seven doors")), true);
   assert.equal(patterns.some((pattern) => pattern.test("They need 2 windows")), false);
+});
+
+test("JPC repair roof age uses a strict over-20 rule instead of examples", () => {
+  const library = sanitizeScorecardLibrary({ scorecards: [{ name: "JPC", bundle: {
+    universal_rules: [],
+    client_rule_sets: { jpc: { rules: [{
+      name: "Repair Roof Age",
+      pass_description: "roof is 10 years old; roof is about 20 years old",
+      fail_description: "five years old",
+      positive_patterns: [] as string[],
+      negative_patterns: [] as string[],
+    }] } },
+    critical_checks: ["Repair Roof Age"],
+  } }] });
+  const rule = library.scorecards?.[0]?.bundle?.client_rule_sets?.jpc.rules?.find((candidate) => candidate.name === "Repair Roof Age");
+  assert.equal(rule?.pass_description, "Any roof older than 20 years is a Pass.");
+  assert.equal(rule?.fail_description, "Any roof 20 years old or newer is a Fail.");
+  const positive = (rule?.positive_patterns ?? []).map((pattern) => new RegExp(pattern, "i"));
+  const negative = (rule?.negative_patterns ?? []).map((pattern) => new RegExp(pattern, "i"));
+  assert.equal(positive.some((pattern) => pattern.test("The roof is 21 years old")), true);
+  assert.equal(positive.some((pattern) => pattern.test("The roof is 47 years old")), true);
+  assert.equal(positive.some((pattern) => pattern.test("The roof is 20 years old")), false);
+  assert.equal(negative.some((pattern) => pattern.test("The roof is 20 years old")), true);
+  assert.equal(negative.some((pattern) => pattern.test("The roof is 8 years old")), true);
+  assert.equal(JPC_REPAIR_ROOF_AGE_RULE.pass_description, rule?.pass_description);
+});
+
+test("all bundled roof-age descriptions are rules rather than example lists", () => {
+  const library = sanitizeScorecardLibrary(JSON.parse(readFileSync(new URL("../../shared/qa_scorecards.json", import.meta.url), "utf8")));
+  const ageRules = library.scorecards?.flatMap((scorecard: any) => {
+    const bundle = scorecard.bundle ?? {};
+    return [...(bundle.universal_rules ?? []), ...Object.values(bundle.client_rule_sets ?? {}).flatMap((set: any) => set.rules ?? [])]
+      .filter((rule) => /roof age/i.test(rule.name || ""))
+      .map((rule) => ({ scorecard: String(scorecard.name), rule }));
+  }) ?? [];
+  assert.ok(ageRules.length >= 5);
+  for (const { scorecard, rule } of ageRules) {
+    assert.doesNotMatch(rule.pass_description ?? "", /;/, `${scorecard} still has pass examples`);
+    assert.doesNotMatch(rule.fail_description ?? "", /;/, `${scorecard} still has fail examples`);
+    assert.match(rule.pass_description ?? "", /years|damage|wear/i, `${scorecard} needs an explicit rule`);
+  }
+});
+
+test("every bundled client scorecard uses semantic LLM rules instead of phrase lists", () => {
+  const source = JSON.parse(readFileSync(new URL("../../shared/qa_scorecards.json", import.meta.url), "utf8"));
+  const library = sanitizeScorecardLibrary(source);
+  const representativeRules: Record<string, [string, RegExp, RegExp]> = {
+    "RbA/QWD": ["Government Grant Disclosure", /does not participate.*all costs.*acknowledges/i, /disclosure.*acknowledgment.*missing|acknowledgment.*missing/i],
+    Pella: ["Credit Score", /650 or higher/i, /below 650/i],
+    KQR: ["Approved Roofing Type", /asphalt.*not a flat or commercial roof/i, /flat or commercial roof/i],
+    Forte: ["Approved Service", /residential flat-roof replacement/i, /commercial flat roof/i],
+    JPC: ["Repair Roof Age", /older than 20/i, /20 years old or newer/i],
+    Bachmans: ["Approved Roofing Type", /asphalt shingles, EPDM, or modified bitumen/i, /metal, slate, or tile only/i],
+    HRS: ["Storm Claim Adjuster", /already inspected or reviewed/i, /has not inspected/i],
+    Feldco: ["Window Count", /explicitly confirms.*no minimum/i, /not confirmed/i],
+  };
+
+  for (const scorecard of library.scorecards ?? []) {
+    const expected = representativeRules[String(scorecard.name)];
+    if (!expected) continue;
+    const [criterion, passRule, failRule] = expected;
+    const bundle = scorecard.bundle ?? {};
+    const rules = [
+      ...(bundle.universal_rules ?? []),
+      ...Object.values(bundle.client_rule_sets ?? {}).flatMap((set: any) => set.rules ?? []),
+    ];
+    const rule = rules.find((candidate) => candidate.name === criterion);
+    assert.ok(rule, `${scorecard.name} is missing ${criterion}`);
+    assert.match(rule.pass_description ?? "", passRule, `${scorecard.name}: ${criterion} needs a semantic pass rule`);
+    assert.match(rule.fail_description ?? "", failRule, `${scorecard.name}: ${criterion} needs a semantic fail rule`);
+  }
+  assert.equal(Object.keys(representativeRules).length, 8);
+});
+
+test("bundled LLM instructions do not contain semicolon-delimited phrase banks", () => {
+  const source = JSON.parse(readFileSync(new URL("../../shared/qa_scorecards.json", import.meta.url), "utf8"));
+  const library = sanitizeScorecardLibrary(source);
+  for (const scorecard of library.scorecards ?? []) {
+    const bundle = scorecard.bundle ?? {};
+    const rules = [
+      ...(bundle.universal_rules ?? []),
+      ...Object.values(bundle.client_rule_sets ?? {}).flatMap((set: any) => set.rules ?? []),
+    ];
+    for (const rule of rules) {
+      assert.doesNotMatch(
+        `${rule.pass_description ?? ""}\n${rule.fail_description ?? ""}`,
+        /;/,
+        `${scorecard.name}: ${rule.name} still exposes a phrase bank to the LLM`,
+      );
+    }
+  }
 });
 
 test("cloud rubric is concise, semantic, and excludes scanner patterns", () => {

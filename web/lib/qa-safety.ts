@@ -78,6 +78,46 @@ export const PELLA_PROJECT_SIZE_RULE: RuleLike = {
   mishear_description: "tree windows -> three windows; too windows -> two windows",
 };
 
+const ROOF_AGE_15_OR_DAMAGE_RULE: RuleLike = {
+  positive_patterns: [
+    String.raw`\b(?:1[5-9]|[2-9]\d|\d{3,})\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:visible\s+damage|roof\s+damage|leak(?:ing|s)?|missing\s+shingles|blown[-\s]+off\s+shingles|storm\s+damage)\b`,
+  ],
+  negative_patterns: [
+    String.raw`\b(?:[0-9]|1[0-4])\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:brand[-\s]+new\s+roof|no\s+(?:roof\s+)?damage|just\s+looking)\b`,
+  ],
+  pass_description: "Roof is at least 15 years old or has qualifying damage, leaks, missing shingles, or storm damage.",
+  fail_description: "Roof is under 15 years old with no qualifying damage, or the customer is only researching.",
+};
+
+const ROOF_AGE_10_OR_WEAR_RULE: RuleLike = {
+  positive_patterns: [
+    String.raw`\b(?:1\d|[2-9]\d|\d{3,})\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:visible\s+(?:wear|damage)|showing\s+wear|leak(?:ing|s)?|missing\s+shingles|staining|storm\s+damage)\b`,
+  ],
+  negative_patterns: [
+    String.raw`\b[0-9]\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:new\s+roof|no\s+(?:wear|damage))\b`,
+  ],
+  pass_description: "Roof is at least 10 years old or has qualifying wear, damage, leaks, missing shingles, staining, or storm damage.",
+  fail_description: "Roof is under 10 years old with no qualifying wear or damage.",
+};
+
+export const JPC_REPAIR_ROOF_AGE_RULE: RuleLike = {
+  name: "Repair Roof Age",
+  positive_patterns: [
+    String.raw`\b(?:2[1-9]|[3-9]\d|\d{3,})\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:over|more\s+than|older\s+than)\s+20\s*(?:years?|yrs?)\b`,
+  ],
+  negative_patterns: [
+    String.raw`\b(?:[0-9]|1\d|20)\s*(?:years?|yrs?)(?:\s*old)?\b`,
+    String.raw`\b(?:20\s*(?:years?|yrs?)\s+or\s+(?:less|younger)|new(?:er)?\s+roof)\b`,
+  ],
+  pass_description: "Any roof older than 20 years is a Pass.",
+  fail_description: "Any roof 20 years old or newer is a Fail.",
+};
+
 const COMMON_LLM_INSTRUCTIONS: Record<string, { pass: string; fail: string }> = {
   "home type confirmed": {
     pass: "Customer confirms the type of home.",
@@ -117,6 +157,167 @@ const COMMON_LLM_INSTRUCTIONS: Record<string, { pass: string; fail: string }> = 
   },
 };
 
+type LlmRuleInstructions = { pass: string; fail: string };
+
+const SCORECARD_LLM_RULES: Record<string, Record<string, LlmRuleInstructions>> = {
+  "rba qwd": {
+    "home type approved": {
+      pass: "Pass when the property is a single-family home, townhouse, or condominium on the third floor or lower. A mobile or manufactured home passes only when it has both a permanent solid foundation and 2x4 framing.",
+      fail: "Fail when the property is a shed, trailer, RV, condominium above the third floor, or a mobile or manufactured home without both a permanent solid foundation and 2x4 framing.",
+    },
+    "government grant disclosure": {
+      pass: "Pass only when the agent states that Renewal by Andersen does not participate in government or free-window assistance programs, states that all costs are paid by the homeowner, and the customer acknowledges the disclosure.",
+      fail: "Fail when government assistance or free windows are discussed and any required part of the disclosure or customer acknowledgment is missing or contradicted.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the project is a full replacement-window or approved replacement-door project in an existing opening and no excluded project type is requested.",
+      fail: "Fail when the project is glass repair, door repair, screen-door-only, egress-window-only, storm-window-only without full replacement, or work on a shed, trailer, or RV.",
+    },
+  },
+  pella: {
+    "approved home type": {
+      pass: "Pass when the property is a single-family home, detached house, multifamily home, duplex, or a townhome or condominium on the third floor or lower.",
+      fail: "Fail when the property is a mobile or manufactured home, trailer, or a townhome or condominium above the third floor.",
+    },
+    "credit score": {
+      pass: "Pass when the customer states a credit score of 650 or higher.",
+      fail: "Fail when the customer states a credit score below 650.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the project is replacement windows or doors installed in existing same-size openings.",
+      fail: "Fail when the project is for a shed, storm-window-only, screen-only, security-door-only, new construction, opening resize or conversion, demolition, or installation of customer-supplied products.",
+    },
+  },
+  kqr: {
+    "approved roofing type": {
+      pass: "Pass when the roof is asphalt or shingle, or the customer is willing to use asphalt shingles, and the project is not a flat or commercial roof.",
+      fail: "Fail when the project is a flat or commercial roof or the customer requires metal, slate, or tile only.",
+    },
+    "approved service": {
+      pass: "Pass when the project is a full roof replacement, a King Quality Roofing repair, or an approved window, siding, gutter, or entry-door replacement.",
+      fail: "Fail when the project is a repair by another contractor, a flat or commercial roof, soffit-only, fascia-only, or sliding-door-only work.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the work is on the main home. A skylight passes only when it is included with a full roof replacement.",
+      fail: "Fail when the work is for a shed, greenhouse, detached outbuilding, or a skylight without a full roof replacement.",
+    },
+    "insurance adjuster": {
+      pass: "Pass when the insurance adjuster has already inspected the property or the claim has already been approved.",
+      fail: "Fail when the adjuster has not inspected the property or the customer is still waiting for the adjuster.",
+    },
+    "approved time slot": {
+      pass: "Pass when the appointment is scheduled for 10:00 AM, 2:00 PM, or 6:00 PM.",
+      fail: "Fail when the appointment is scheduled for any other time.",
+    },
+  },
+  forte: {
+    "approved roofing type": {
+      pass: "Pass when the roof is asphalt or shingle, the customer is willing to convert to asphalt, or the project is a residential flat roof.",
+      fail: "Fail when the customer requires metal, slate, tile, rubber, fiberglass, or 3-tab shingles only.",
+    },
+    "approved service": {
+      pass: "Pass when the project is roof replacement, residential flat-roof replacement, commercial asphalt roofing, or approved window, siding, or gutter replacement.",
+      fail: "Fail when the project is a non-Forte repair, commercial flat roof, or repair of windows or siding not installed by Forte.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the work is on the main home. A skylight passes only when it is included with a full roof replacement.",
+      fail: "Fail when the work is for a shed, greenhouse, detached outbuilding, or a skylight without a full roof replacement.",
+    },
+    "insurance adjuster": {
+      pass: "Pass when the insurance adjuster has already inspected the property or the claim has already been approved.",
+      fail: "Fail when the adjuster has not inspected the property or the customer is still waiting for the adjuster.",
+    },
+    "approved time slot": {
+      pass: "Pass when the appointment is scheduled for 10:00 AM, 2:00 PM, or 6:00 PM.",
+      fail: "Fail when the appointment is scheduled for any other time.",
+    },
+  },
+  jpc: {
+    "no metal roofing": {
+      pass: "Pass when the project uses asphalt shingles or the customer is willing to use asphalt shingles.",
+      fail: "Fail when the customer requires metal or standing-seam roofing only.",
+    },
+    "approved service": {
+      pass: "Pass when the project is an asphalt or shingle roof replacement or repair for a roof issue, leak, missing shingles, or roof damage.",
+      fail: "Fail when the project requires metal roofing only.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the work is on the main home. A skylight passes only when it is included with a full roof replacement.",
+      fail: "Fail when the work is for a shed, greenhouse, detached structure, outbuilding, or a skylight without a full roof replacement.",
+    },
+  },
+  bachmans: {
+    "approved roofing type": {
+      pass: "Pass when the project uses asphalt shingles, EPDM, or modified bitumen, or the customer is willing to use one of those approved roofing types.",
+      fail: "Fail when the customer requires metal, slate, or tile only or refuses all approved roofing types.",
+    },
+    "approved service": {
+      pass: "Pass when the project is roof replacement or repair, leak investigation, missing-shingle repair, skylight repair or replacement, or chimney flashing.",
+      fail: "Fail when the project is entry-door-only, glass-only repair, block windows, gutter-guard-only, Gutter Helmet, or half-round-gutter-only work.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the work is on the main home. A skylight passes only when it is included with a full roof replacement.",
+      fail: "Fail when the work is for a shed, greenhouse, detached garage, outbuilding, or a skylight without a full roof replacement.",
+    },
+    "insurance adjuster": {
+      pass: "Pass when the insurance adjuster has already inspected the property or the claim has already been approved.",
+      fail: "Fail when the adjuster has not inspected the property or the customer is still waiting for the adjuster.",
+    },
+    "approved time slot": {
+      pass: "Pass when the appointment is scheduled for 9:00 AM, 1:00 PM, or 5:00 PM.",
+      fail: "Fail when the appointment is scheduled for any other time.",
+    },
+  },
+  hrs: {
+    "approved roofing type": {
+      pass: "Pass when the project is for a residential asphalt, shingle, or metal roof.",
+      fail: "Fail when the project is for a commercial flat roof or requires slate or tile only.",
+    },
+    "storm claim adjuster": {
+      pass: "Pass when the insurance adjuster has already inspected or reviewed the storm claim.",
+      fail: "Fail when the adjuster has not inspected the property or the customer is still waiting for the adjuster.",
+    },
+    "approved service": {
+      pass: "Pass when the project is residential roof replacement, roof inspection, leak evaluation, storm or insurance-claim work, or metal-roof replacement.",
+      fail: "Fail when the project is a commercial roof or work on a shed or greenhouse roof.",
+    },
+    "no unapproved projects": {
+      pass: "Pass when the work is on the main home. A skylight passes only when it is included with a full roof replacement.",
+      fail: "Fail when the work is for a shed, greenhouse, outbuilding, or a skylight without a full roof replacement.",
+    },
+    "approved time slot": {
+      pass: "Pass when the appointment is scheduled for 9:00 AM, 1:00 PM, or 5:00 PM.",
+      fail: "Fail when the appointment is scheduled for any other time.",
+    },
+  },
+  feldco: {
+    "exterior material": {
+      pass: "Pass when the customer explicitly confirms the home's exterior material.",
+      fail: "Fail when the exterior material is not confirmed.",
+    },
+    "garage type": {
+      pass: "Pass when the customer explicitly confirms an attached garage, detached garage, or no garage.",
+      fail: "Fail when the garage type is not confirmed.",
+    },
+    "window count": {
+      pass: "Pass when the customer explicitly confirms the number of windows being replaced. There is no minimum window count.",
+      fail: "Fail when the number of replacement windows is not confirmed.",
+    },
+    "vinyl disclaimer": {
+      pass: "Pass when the agent states the required disclosure that Feldco replacement windows are vinyl.",
+      fail: "Fail when the vinyl disclosure is omitted or the customer requires aluminum, wood, or storm windows only.",
+    },
+    "approved service": {
+      pass: "Pass when the project is for replacement windows or approved replacement doors and the customer owns an eligible home.",
+      fail: "Fail when the project is roofing, siding, storm-window-only, storm-door-only, repair-only, glass-only, a single-wide mobile home, or the customer is a renter or non-owner.",
+    },
+    "approved time slot": {
+      pass: "Pass when the appointment uses an approved slot at 9:30 AM, 10:30 AM, 12:30 PM, 1:30 PM, 3:30 PM, 4:30 PM, or 6:30 PM and all day-specific scheduling restrictions are satisfied.",
+      fail: "Fail when the appointment is on Sunday, violates Friday-to-Saturday or Saturday-after-5:00-PM restrictions, or uses a time outside the approved slots.",
+    },
+  },
+};
+
 const MISSING_LLM_INSTRUCTIONS: Record<string, { pass?: string; fail?: string }> = {
   "exterior material": {
     fail: "The exterior material is not confirmed.",
@@ -134,6 +335,26 @@ const MISSING_LLM_INSTRUCTIONS: Record<string, { pass?: string; fail?: string }>
 
 function criterionKey(value = "") {
   return value.toLowerCase().replace(/^critical\s*:\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function scorecardRuleKey(value = "") {
+  const key = criterionKey(value);
+  if (key.includes("rba") || key.includes("qwd")) return "rba qwd";
+  if (key.includes("pella")) return "pella";
+  if (key.includes("kqr") || key.includes("king quality")) return "kqr";
+  if (key.includes("forte")) return "forte";
+  if (key.includes("jpc") || key.includes("jp carroll")) return "jpc";
+  if (key.includes("bachman")) return "bachmans";
+  if (key === "hrs" || key.includes("home roofing solutions")) return "hrs";
+  if (key.includes("feldco")) return "feldco";
+  return key;
+}
+
+function applyScorecardLlmRule(rule: RuleLike, scorecardName: string): RuleLike {
+  const instructions = SCORECARD_LLM_RULES[scorecardRuleKey(scorecardName)]?.[criterionKey(rule.name)];
+  return instructions
+    ? { ...rule, pass_description: instructions.pass, fail_description: instructions.fail }
+    : rule;
 }
 
 function isSameDayInstruction(value = "") {
@@ -226,6 +447,29 @@ export function sanitizeScorecardLibrary<T extends LibraryLike>(library: T): T {
         { ...set, rules: (set.rules ?? []).map(polishProjectSize) },
       ]));
     }
+    const polishRoofAge = (rule: RuleLike) => {
+      const key = criterionKey(rule.name);
+      if (scorecardName.includes("jpc") && key === "repair roof age") {
+        return { ...rule, ...JPC_REPAIR_ROOF_AGE_RULE, name: rule.name || JPC_REPAIR_ROOF_AGE_RULE.name };
+      }
+      if (["kqr", "forte", "bachmans"].some((name) => scorecardName.includes(name)) && key === "roof age or damage") {
+        return { ...rule, ...ROOF_AGE_15_OR_DAMAGE_RULE, name: rule.name };
+      }
+      if (scorecardName === "hrs" && key === "roof age or wear") {
+        return { ...rule, ...ROOF_AGE_10_OR_WEAR_RULE, name: rule.name };
+      }
+      return rule;
+    };
+    universalRules = universalRules.map(polishRoofAge);
+    clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => [
+      key,
+      { ...set, rules: (set.rules ?? []).map(polishRoofAge) },
+    ]));
+    universalRules = universalRules.map((rule) => applyScorecardLlmRule(rule, scorecardName));
+    clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => [
+      key,
+      { ...set, rules: (set.rules ?? []).map((rule) => applyScorecardLlmRule(rule, scorecardName)) },
+    ]));
     if (Object.keys(clientRuleSets).length) {
       clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => {
         const rules = [...(set.rules ?? [])];
