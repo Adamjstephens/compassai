@@ -354,8 +354,8 @@
                   "\\bhigher\\s+than\\s+third\\s+floor\\b",
                   "\\babove\\s+the\\s+third\\s+floor\\b"
                 ],
-                "pass_description": "single family;single-family home;detached house;multi-family;multifamily;duplex;two family;townhome first floor;townhome second floor;townhome third floor;condo first floor;condo second floor;condo third floor",
-                "fail_description": "mobile home;manufactured home;trailer;double wide;single wide;condo fourth floor;townhome fourth floor;4th floor;fifth floor;higher than third floor;above the third floor",
+                "pass_description": "single family; single-family home; detached house; multi-family; multifamily; duplex; two family; townhome first floor; townhome second floor; townhome third floor; condo first floor; condo second floor; condo third floor",
+                "fail_description": "mobile home; manufactured home; trailer; double wide; single wide; condo fourth floor; townhome fourth floor; 4th floor; fifth floor; higher than third floor; above the third floor",
                 "mishear_description": "multi family -> multifamily;town home -> townhome;mobil home -> mobile home;manufacture home -> manufactured home"
               },
               {
@@ -376,8 +376,8 @@
                   "\\bbad\\s+credit\\b",
                   "\\bpoor\\s+credit\\b"
                 ],
-                "pass_description": "650 or higher;over 650;above 650;credit score is 650;credit score is good;good credit",
-                "fail_description": "under 650;below 650;less than 650;bad credit;poor credit",
+                "pass_description": "650 or higher; over 650; above 650; credit score is 650; credit score is good; good credit",
+                "fail_description": "under 650; below 650; less than 650; bad credit; poor credit",
                 "mishear_description": "six fifty -> 650;six hundred fifty -> 650"
               },
               {
@@ -401,8 +401,8 @@
                   "\\bjust\\s+one\\s+window\\b",
                   "\\bonly\\s+two\\s+windows\\b"
                 ],
-                "pass_description": "3 windows;three windows;4 windows;four windows;5 windows;several windows;whole house;all windows",
-                "fail_description": "1 window;one window;2 windows;two windows;just one window;only two windows",
+                "pass_description": "3 windows; three windows; 4 windows; four windows; 5 windows; several windows; whole house; all windows",
+                "fail_description": "1 window; one window; 2 windows; two windows; just one window; only two windows",
                 "mishear_description": "tree windows -> three windows;too windows -> two windows"
               },
               {
@@ -439,8 +439,8 @@
                   "\\binstall\\s+a\\s+window\\s+I\\s+bought\\b",
                   "\\binstall\\s+a\\s+door\\s+I\\s+bought\\b"
                 ],
-                "pass_description": "replacement windows;window replacement;replacing windows;replacement doors;door replacement;replacing doors;full window replacement;full door replacement;same size replacement;existing opening",
-                "fail_description": "shed;sheds;storm windows;screens only;just screens;screen repair;security door;security doors;new construction;reduce window count;reducing window count;turn a window into a door;turn a door into a window;transforming a window into a door;transforming a door into a window;demolition;already purchased the window;already purchased the door;install a window I bought;install a door I bought",
+                "pass_description": "replacement windows; window replacement; replacing windows; replacement doors; door replacement; replacing doors; full window replacement; full door replacement; same size replacement; existing opening",
+                "fail_description": "shed; sheds; storm windows; screens only; just screens; screen repair; security door; security doors; new construction; reduce window count; reducing window count; turn a window into a door; turn a door into a window; transforming a window into a door; transforming a door into a window; demolition; already purchased the window; already purchased the door; install a window I bought; install a door I bought",
                 "mishear_description": "store windows -> storm windows;screen stores -> screen doors;new constructions -> new construction"
               },
               {
@@ -456,7 +456,7 @@
                   "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
                 ],
                 "negative_patterns": [],
-                "pass_description": "email is correct;that is my email;yes that is correct;confirmed email;spell my email;email address is",
+                "pass_description": "email is correct; that is my email; yes that is correct; confirmed email; spell my email; email address is",
                 "mishear_description": "e male -> email;gmail dot com -> gmail.com"
               },
               {
@@ -477,8 +477,8 @@
                   "\\bdifferent\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone number is correct;that is my number;best number;call me at;confirmed number;yes that is the right number",
-                "fail_description": "wrong number;not my number;different number;do not call this number"
+                "pass_description": "phone number is correct; that is my number; best number; call me at; confirmed number; yes that is the right number",
+                "fail_description": "wrong number; not my number; different number; do not call this number"
               }
             ]
           }
@@ -688,8 +688,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there"
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there"
               },
               {
                 "name": "Confirmed Email",
@@ -708,8 +708,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email"
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email"
               },
               {
                 "name": "Confirmed Phone",
@@ -727,8 +727,8 @@
                   "\\bwrong\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
-                "fail_description": "wrong number;do not call this number"
+                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
+                "fail_description": "wrong number; do not call this number"
               },
               {
                 "name": "Decision Makers",
@@ -742,8 +742,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
               },
               {
                 "name": "Roof Age Or Damage",
@@ -763,8 +763,8 @@
                   "\\bno\\s+damage\\b",
                   "\\bjust\\s+looking\\b"
                 ],
-                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;roof damage",
-                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+                "pass_description": "15 years old; over 15 years old; showing damage; visible damage; leaking; missing shingles; roof damage",
+                "fail_description": "brand new roof; less than 15 years old; no damage; just looking"
               },
               {
                 "name": "Approved Roofing Type",
@@ -782,8 +782,8 @@
                   "\\bslate\\s+only\\b",
                   "\\btile\\s+only\\b"
                 ],
-                "pass_description": "asphalt shingles;shingle roof;open to asphalt;interested in shingles;not flat",
-                "fail_description": "flat roof;commercial roof;metal only;slate only;tile only"
+                "pass_description": "asphalt shingles; shingle roof; open to asphalt; interested in shingles; not flat",
+                "fail_description": "flat roof; commercial roof; metal only; slate only; tile only"
               },
               {
                 "name": "Approved Service",
@@ -801,8 +801,8 @@
                   "\\bfascia\\s+only\\b",
                   "\\bsliding\\s+door\\s+only\\b"
                 ],
-                "pass_description": "roof replacement;full roof replacement;King Quality roof repair;window replacement;siding replacement;gutter replacement;entry door replacement",
-                "fail_description": "non King Quality repair;flat roof;commercial project;soffit only;fascia only;sliding door only",
+                "pass_description": "roof replacement; full roof replacement; King Quality roof repair; window replacement; siding replacement; gutter replacement; entry door replacement",
+                "fail_description": "non King Quality repair; flat roof; commercial project; soffit only; fascia only; sliding door only",
                 "mishear_description": "sofett -> soffit; facia -> fascia"
               },
               {
@@ -824,8 +824,8 @@
                   "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
                   "\\boutbuilding\\s+only\\b"
                 ],
-                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;skylight with roof replacement;same home roof",
-                "fail_description": "shed;greenhouse;skylight only;skylight without full roof replacement;outbuilding only"
+                "pass_description": "no sheds; not a shed; not a greenhouse; full roof replacement with skylight; skylight with roof replacement; same home roof",
+                "fail_description": "shed; greenhouse; skylight only; skylight without full roof replacement; outbuilding only"
               },
               {
                 "name": "Insurance Adjuster",
@@ -842,8 +842,8 @@
                   "\\bwaiting\\s+for\\s+adjuster\\b",
                   "\\bno\\s+adjuster\\s+visit\\b"
                 ],
-                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
-                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+                "pass_description": "adjuster already came; adjuster has visited; insurance inspected it; claim approved; adjuster looked at it",
+                "fail_description": "adjuster has not come yet; waiting for adjuster; no adjuster visit"
               },
               {
                 "name": "Appointment Length",
@@ -858,8 +858,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "90 minutes;about 90 minutes;approximately 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+                "pass_description": "90 minutes; about 90 minutes; approximately 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
               },
               {
                 "name": "Approved Time Slot",
@@ -872,28 +872,10 @@
                 "negative_patterns": [
                   "\\b9\\s+AM\\s+only\\b",
                   "\\b1\\s+PM\\s+only\\b",
-                  "\\b5\\s+PM\\s+only\\b",
-                  "\\bsame\\s+day\\b"
+                  "\\b5\\s+PM\\s+only\\b"
                 ],
-                "pass_description": "10 AM;2 PM;6 PM;ten AM;two PM;six PM",
-                "fail_description": "9 AM only;1 PM only;5 PM only;same day"
-              },
-              {
-                "name": "No Same Day",
-                "type": null,
-                "positive_patterns": [
-                  "\\bno\\s+same\\s+day\\b",
-                  "\\btomorrow\\s+works\\b",
-                  "\\blater\\s+this\\s+week\\b",
-                  "\\bwithin\\s+72\\s+hours\\b",
-                  "\\bnext\\s+available\\b"
-                ],
-                "negative_patterns": [
-                  "\\btoday\\s+only\\b",
-                  "\\bsame\\s+day\\s+appointment\\b"
-                ],
-                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
-                "fail_description": "today only;same day appointment"
+                "pass_description": "10 AM; 2 PM; 6 PM; ten AM; two PM; six PM",
+                "fail_description": "9 AM only; 1 PM only; 5 PM only"
               }
             ]
           }
@@ -907,7 +889,6 @@
           "Decision Makers",
           "Homeowner confirmed",
           "Insurance Adjuster",
-          "No Same Day",
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Roof Age Or Damage"
@@ -1065,8 +1046,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there"
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there"
               },
               {
                 "name": "Confirmed Email",
@@ -1085,8 +1066,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email"
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email"
               },
               {
                 "name": "Confirmed Phone",
@@ -1104,8 +1085,8 @@
                   "\\bwrong\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
-                "fail_description": "wrong number;do not call this number"
+                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
+                "fail_description": "wrong number; do not call this number"
               },
               {
                 "name": "Decision Makers",
@@ -1119,8 +1100,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
               },
               {
                 "name": "Roof Age Or Damage",
@@ -1140,8 +1121,8 @@
                   "\\bno\\s+damage\\b",
                   "\\bjust\\s+looking\\b"
                 ],
-                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;roof damage",
-                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+                "pass_description": "15 years old; over 15 years old; showing damage; visible damage; leaking; missing shingles; roof damage",
+                "fail_description": "brand new roof; less than 15 years old; no damage; just looking"
               },
               {
                 "name": "Approved Roofing Type",
@@ -1160,8 +1141,8 @@
                   "\\bfiberglass\\s+roof\\b",
                   "\\b3\\-tab\\s+shingles\\b"
                 ],
-                "pass_description": "asphalt shingles;shingle roof;open to asphalt;converting to asphalt;residential flat roof",
-                "fail_description": "metal roof only;slate roof;tile roof;rubber roof;fiberglass roof;3-tab shingles",
+                "pass_description": "asphalt shingles; shingle roof; open to asphalt; converting to asphalt; residential flat roof",
+                "fail_description": "metal roof only; slate roof; tile roof; rubber roof; fiberglass roof; 3-tab shingles",
                 "mishear_description": "three tab -> 3-tab"
               },
               {
@@ -1178,8 +1159,8 @@
                   "\\bwindow\\s+repair\\s+on\\s+non\\s+Forte\\s+windows\\b",
                   "\\bsiding\\s+repair\\s+on\\s+non\\s+Forte\\s+siding\\b"
                 ],
-                "pass_description": "roof replacement;full roof replacement;residential flat roof replacement;commercial asphalt roof;window replacement;siding replacement;gutter replacement",
-                "fail_description": "non Forte repair;commercial flat roof;window repair on non Forte windows;siding repair on non Forte siding"
+                "pass_description": "roof replacement; full roof replacement; residential flat roof replacement; commercial asphalt roof; window replacement; siding replacement; gutter replacement",
+                "fail_description": "non Forte repair; commercial flat roof; window repair on non Forte windows; siding repair on non Forte siding"
               },
               {
                 "name": "No Unapproved Projects",
@@ -1200,8 +1181,8 @@
                   "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
                   "\\boutbuilding\\s+only\\b"
                 ],
-                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;skylight with roof replacement;same home roof",
-                "fail_description": "shed;greenhouse;skylight only;skylight without full roof replacement;outbuilding only"
+                "pass_description": "no sheds; not a shed; not a greenhouse; full roof replacement with skylight; skylight with roof replacement; same home roof",
+                "fail_description": "shed; greenhouse; skylight only; skylight without full roof replacement; outbuilding only"
               },
               {
                 "name": "Insurance Adjuster",
@@ -1218,8 +1199,8 @@
                   "\\bwaiting\\s+for\\s+adjuster\\b",
                   "\\bno\\s+adjuster\\s+visit\\b"
                 ],
-                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
-                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+                "pass_description": "adjuster already came; adjuster has visited; insurance inspected it; claim approved; adjuster looked at it",
+                "fail_description": "adjuster has not come yet; waiting for adjuster; no adjuster visit"
               },
               {
                 "name": "Appointment Length",
@@ -1234,8 +1215,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "90 minutes;about 90 minutes;approximately 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+                "pass_description": "90 minutes; about 90 minutes; approximately 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
               },
               {
                 "name": "Approved Time Slot",
@@ -1248,28 +1229,10 @@
                 "negative_patterns": [
                   "\\b9\\s+AM\\s+only\\b",
                   "\\b1\\s+PM\\s+only\\b",
-                  "\\b5\\s+PM\\s+only\\b",
-                  "\\bsame\\s+day\\b"
+                  "\\b5\\s+PM\\s+only\\b"
                 ],
-                "pass_description": "10 AM;2 PM;6 PM;ten AM;two PM;six PM",
-                "fail_description": "9 AM only;1 PM only;5 PM only;same day"
-              },
-              {
-                "name": "No Same Day",
-                "type": null,
-                "positive_patterns": [
-                  "\\bno\\s+same\\s+day\\b",
-                  "\\btomorrow\\s+works\\b",
-                  "\\blater\\s+this\\s+week\\b",
-                  "\\bwithin\\s+72\\s+hours\\b",
-                  "\\bnext\\s+available\\b"
-                ],
-                "negative_patterns": [
-                  "\\btoday\\s+only\\b",
-                  "\\bsame\\s+day\\s+appointment\\b"
-                ],
-                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
-                "fail_description": "today only;same day appointment"
+                "pass_description": "10 AM; 2 PM; 6 PM; ten AM; two PM; six PM",
+                "fail_description": "9 AM only; 1 PM only; 5 PM only"
               }
             ]
           }
@@ -1283,7 +1246,6 @@
           "Decision Makers",
           "Homeowner confirmed",
           "Insurance Adjuster",
-          "No Same Day",
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Roof Age Or Damage"
@@ -1439,8 +1401,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there",
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1460,8 +1422,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email",
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1480,8 +1442,8 @@
                   "\\bwrong\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
-                "fail_description": "wrong number;do not call this number",
+                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
+                "fail_description": "wrong number; do not call this number",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1496,8 +1458,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "decision maker will be there;all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there",
+                "pass_description": "decision maker will be there; all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1517,8 +1479,8 @@
                   "\\bfive\\s+years\\s+old\\b",
                   "\\brepair\\s+on\\s+newer\\s+roof\\b"
                 ],
-                "pass_description": "roof is 10 years old;over 10 years old;10 plus years;older roof;roof is about 12 years old;roof is about 20 years old",
-                "fail_description": "roof is under 10 years old;new roof;five years old;repair on newer roof",
+                "pass_description": "roof is 10 years old; over 10 years old; 10 plus years; older roof; roof is about 12 years old; roof is about 20 years old",
+                "fail_description": "roof is under 10 years old; new roof; five years old; repair on newer roof",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1537,8 +1499,8 @@
                   "\\bmetal\\s+roofing\\b",
                   "\\bonly\\s+want\\s+metal\\b"
                 ],
-                "pass_description": "asphalt shingles;shingle roof;open to asphalt;interested in shingles;not metal",
-                "fail_description": "metal roof;standing seam;metal roofing;only want metal",
+                "pass_description": "asphalt shingles; shingle roof; open to asphalt; interested in shingles; not metal",
+                "fail_description": "metal roof; standing seam; metal roofing; only want metal",
                 "mishear_description": "JP Carrol -> JP Carroll; standing seem -> standing seam"
               },
               {
@@ -1553,8 +1515,8 @@
                   "\\bmetal\\s+roofing\\b",
                   "\\bmetal\\s+roof\\s+only\\b"
                 ],
-                "pass_description": "roof replacement;roof repair;roof issue;leak;missing shingles;roof damage;asphalt shingles",
-                "fail_description": "metal roofing;metal roof only",
+                "pass_description": "roof replacement; roof repair; roof issue; leak; missing shingles; roof damage; asphalt shingles",
+                "fail_description": "metal roofing; metal roof only",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1576,8 +1538,8 @@
                   "\\bdetached\\s+structure\\s+only\\b",
                   "\\boutbuilding\\s+only\\b"
                 ],
-                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
-                "fail_description": "shed;greenhouse;skylight without full roof replacement;detached structure only;outbuilding only",
+                "pass_description": "no sheds; not a shed; not a greenhouse; full roof replacement with skylight; not skylight only; same home roof",
+                "fail_description": "shed; greenhouse; skylight without full roof replacement; detached structure only; outbuilding only",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1593,45 +1555,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "60 to 90 minutes;sixty to ninety minutes;about 90 minutes;appointment is 60 to 90 minutes;consultation takes about an hour",
-                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long",
-                "mishear_description": "JP Carrol -> JP Carroll"
-              },
-              {
-                "name": "No Same Day",
-                "type": null,
-                "positive_patterns": [
-                  "\\bno\\s+same\\s+day\\b",
-                  "\\btomorrow\\s+works\\b",
-                  "\\blater\\s+this\\s+week\\b",
-                  "\\bwithin\\s+7\\s+days\\b",
-                  "\\bnext\\s+available\\b"
-                ],
-                "negative_patterns": [
-                  "\\btoday\\s+only\\b",
-                  "\\bsame\\s+day\\s+appointment\\b"
-                ],
-                "pass_description": "no same day;tomorrow works;later this week;within 7 days;next available",
-                "fail_description": "today only;same day appointment",
-                "mishear_description": "JP Carrol -> JP Carroll"
-              },
-              {
-                "name": "Booked Correct Calendar",
-                "type": null,
-                "positive_patterns": [
-                  "\\bJP\\s+Carroll\\s+calendar\\b",
-                  "\\bcorrect\\s+calendar\\b",
-                  "\\bbook\\s+on\\s+JP\\s+Carroll\\b",
-                  "\\bJP\\s+Carroll\\s+appointment\\b"
-                ],
-                "negative_patterns": [
-                  "\\bwrong\\s+calendar\\b",
-                  "\\bBachmans\\s+calendar\\b",
-                  "\\bForte\\s+calendar\\b",
-                  "\\bKing\\s+Quality\\s+calendar\\b"
-                ],
-                "pass_description": "JP Carroll calendar;correct calendar;book on JP Carroll;JP Carroll appointment",
-                "fail_description": "wrong calendar;Bachmans calendar;Forte calendar;King Quality calendar",
+                "pass_description": "60 to 90 minutes; sixty to ninety minutes; about 90 minutes; appointment is 60 to 90 minutes; consultation takes about an hour",
+                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long",
                 "mishear_description": "JP Carrol -> JP Carroll"
               }
             ]
@@ -1639,14 +1564,12 @@
         },
         "critical_checks": [
           "Approved Service",
-          "Booked Correct Calendar",
           "Confirmed Address",
           "Confirmed Email",
           "Confirmed Phone",
           "Decision Makers",
           "Homeowner confirmed",
           "No Metal Roofing",
-          "No Same Day",
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Repair Roof Age"
@@ -1846,8 +1769,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there"
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there"
               },
               {
                 "name": "Confirmed Email",
@@ -1866,8 +1789,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email"
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email"
               },
               {
                 "name": "Confirmed Phone",
@@ -1885,8 +1808,8 @@
                   "\\bwrong\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
-                "fail_description": "wrong number;do not call this number"
+                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
+                "fail_description": "wrong number; do not call this number"
               },
               {
                 "name": "Decision Makers",
@@ -1900,8 +1823,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
               },
               {
                 "name": "Roof Age Or Damage",
@@ -1922,8 +1845,8 @@
                   "\\bno\\s+damage\\b",
                   "\\bjust\\s+looking\\b"
                 ],
-                "pass_description": "15 years old;over 15 years old;showing damage;visible damage;leaking;missing shingles;blown off shingles;storm damage",
-                "fail_description": "brand new roof;less than 15 years old;no damage;just looking"
+                "pass_description": "15 years old; over 15 years old; showing damage; visible damage; leaking; missing shingles; blown off shingles; storm damage",
+                "fail_description": "brand new roof; less than 15 years old; no damage; just looking"
               },
               {
                 "name": "Approved Roofing Type",
@@ -1940,8 +1863,8 @@
                   "\\btile\\s+roof\\s+only\\b",
                   "\\bnot\\s+open\\s+to\\s+asphalt\\b"
                 ],
-                "pass_description": "asphalt shingles;EPDM;modified bitumen;open to asphalt;shingle roof;flat roof EPDM",
-                "fail_description": "metal roof only;slate roof only;tile roof only;not open to asphalt",
+                "pass_description": "asphalt shingles; EPDM; modified bitumen; open to asphalt; shingle roof; flat roof EPDM",
+                "fail_description": "metal roof only; slate roof only; tile roof only; not open to asphalt",
                 "mishear_description": "EPDM -> EPDM; modified bitumen -> modified bitumen"
               },
               {
@@ -1960,8 +1883,8 @@
                   "\\bGutter\\s+Helmet\\b",
                   "\\bhalf\\s+round\\s+gutters\\b"
                 ],
-                "pass_description": "roof replacement;roof repair;leak investigation;blown off shingles;skylight repair;skylight replacement;chimney flashing",
-                "fail_description": "entry door only;glass only repair;block windows;gutter guards only;Gutter Helmet;half round gutters",
+                "pass_description": "roof replacement; roof repair; leak investigation; blown off shingles; skylight repair; skylight replacement; chimney flashing",
+                "fail_description": "entry door only; glass only repair; block windows; gutter guards only; Gutter Helmet; half round gutters",
                 "mishear_description": "gutter helmut -> Gutter Helmet; block window -> block windows"
               },
               {
@@ -1983,8 +1906,8 @@
                   "\\bdetached\\s+garage\\s+only\\b",
                   "\\boutbuilding\\s+only\\b"
                 ],
-                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
-                "fail_description": "shed;greenhouse;skylight without full roof replacement;detached garage only;outbuilding only"
+                "pass_description": "no sheds; not a shed; not a greenhouse; full roof replacement with skylight; not skylight only; same home roof",
+                "fail_description": "shed; greenhouse; skylight without full roof replacement; detached garage only; outbuilding only"
               },
               {
                 "name": "Insurance Adjuster",
@@ -2001,8 +1924,8 @@
                   "\\bwaiting\\s+for\\s+adjuster\\b",
                   "\\bno\\s+adjuster\\s+visit\\b"
                 ],
-                "pass_description": "adjuster already came;adjuster has visited;insurance inspected it;claim approved;adjuster looked at it",
-                "fail_description": "adjuster has not come yet;waiting for adjuster;no adjuster visit"
+                "pass_description": "adjuster already came; adjuster has visited; insurance inspected it; claim approved; adjuster looked at it",
+                "fail_description": "adjuster has not come yet; waiting for adjuster; no adjuster visit"
               },
               {
                 "name": "Appointment Length",
@@ -2017,8 +1940,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "90 minutes;about 90 minutes;60 to 90 minutes;appointment is 90 minutes;consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+                "pass_description": "90 minutes; about 90 minutes; 60 to 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
+                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
               },
               {
                 "name": "Approved Time Slot",
@@ -2029,29 +1952,10 @@
                   "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
                 ],
                 "negative_patterns": [
-                  "\\bsame\\s+day\\b",
-                  "\\btoday\\s+only\\b",
                   "\\boutside\\s+9\\s+1\\s+or\\s+5\\b"
                 ],
-                "pass_description": "9 AM;1 PM;5 PM;nine AM;one PM;five PM",
-                "fail_description": "same day;today only;outside 9 1 or 5"
-              },
-              {
-                "name": "No Same Day",
-                "type": null,
-                "positive_patterns": [
-                  "\\bno\\s+same\\s+day\\b",
-                  "\\btomorrow\\s+works\\b",
-                  "\\blater\\s+this\\s+week\\b",
-                  "\\bwithin\\s+72\\s+hours\\b",
-                  "\\bnext\\s+available\\b"
-                ],
-                "negative_patterns": [
-                  "\\btoday\\s+only\\b",
-                  "\\bsame\\s+day\\s+appointment\\b"
-                ],
-                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
-                "fail_description": "today only;same day appointment"
+                "pass_description": "9 AM; 1 PM; 5 PM; nine AM; one PM; five PM",
+                "fail_description": "outside 9 1 or 5"
               }
             ]
           }
@@ -2065,7 +1969,6 @@
           "Decision Makers",
           "Homeowner confirmed",
           "Insurance Adjuster",
-          "No Same Day",
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Roof Age Or Damage"
@@ -2231,8 +2134,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there"
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there"
               },
               {
                 "name": "Confirmed Email",
@@ -2251,8 +2154,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email"
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email"
               },
               {
                 "name": "Confirmed Phone",
@@ -2270,8 +2173,8 @@
                   "\\bwrong\\s+number\\b",
                   "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed;confirmed phone;best number is;call me at;this is my cell;yes this number is good",
-                "fail_description": "wrong number;do not call this number"
+                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
+                "fail_description": "wrong number; do not call this number"
               },
               {
                 "name": "Decision Makers",
@@ -2285,8 +2188,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there"
+                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
               },
               {
                 "name": "Roof Age Or Wear",
@@ -2307,8 +2210,8 @@
                   "\\bno\\s+wear\\b",
                   "\\bno\\s+damage\\b"
                 ],
-                "pass_description": "10 years old;over 10 years old;showing wear;visible wear;leaks;missing shingles;staining;storm damage",
-                "fail_description": "new roof;less than 10 years old;no wear;no damage"
+                "pass_description": "10 years old; over 10 years old; showing wear; visible wear; leaks; missing shingles; staining; storm damage",
+                "fail_description": "new roof; less than 10 years old; no wear; no damage"
               },
               {
                 "name": "Approved Roofing Type",
@@ -2324,8 +2227,8 @@
                   "\\bslate\\s+only\\b",
                   "\\btile\\s+only\\b"
                 ],
-                "pass_description": "asphalt shingles;metal roofing;shingle roof;metal roof;open to asphalt;open to metal",
-                "fail_description": "flat commercial roof;slate only;tile only"
+                "pass_description": "asphalt shingles; metal roofing; shingle roof; metal roof; open to asphalt; open to metal",
+                "fail_description": "flat commercial roof; slate only; tile only"
               },
               {
                 "name": "Storm Claim Adjuster",
@@ -2342,8 +2245,8 @@
                   "\\bwaiting\\s+for\\s+adjuster\\b",
                   "\\bno\\s+adjuster\\s+yet\\b"
                 ],
-                "pass_description": "adjuster already came;adjuster inspected;insurance adjuster visited;storm claim inspected;claim already reviewed",
-                "fail_description": "adjuster has not visited;waiting for adjuster;no adjuster yet"
+                "pass_description": "adjuster already came; adjuster inspected; insurance adjuster visited; storm claim inspected; claim already reviewed",
+                "fail_description": "adjuster has not visited; waiting for adjuster; no adjuster yet"
               },
               {
                 "name": "Approved Service",
@@ -2358,8 +2261,8 @@
                   "\\bsmall\\s+shed\\s+roof\\b",
                   "\\bgreenhouse\\s+roof\\b"
                 ],
-                "pass_description": "roof replacement;full roof replacement;roof inspection;leak evaluation;storm damage;insurance roof claim;metal roof replacement",
-                "fail_description": "commercial roof;small shed roof;greenhouse roof"
+                "pass_description": "roof replacement; full roof replacement; roof inspection; leak evaluation; storm damage; insurance roof claim; metal roof replacement",
+                "fail_description": "commercial roof; small shed roof; greenhouse roof"
               },
               {
                 "name": "No Unapproved Projects",
@@ -2379,8 +2282,8 @@
                   "\\bskylight\\s+without\\s+full\\s+roof\\s+replacement\\b",
                   "\\boutbuilding\\s+only\\b"
                 ],
-                "pass_description": "no sheds;not a shed;not a greenhouse;full roof replacement with skylight;not skylight only;same home roof",
-                "fail_description": "shed;greenhouse;skylight without full roof replacement;outbuilding only"
+                "pass_description": "no sheds; not a shed; not a greenhouse; full roof replacement with skylight; not skylight only; same home roof",
+                "fail_description": "shed; greenhouse; skylight without full roof replacement; outbuilding only"
               },
               {
                 "name": "Appointment Length",
@@ -2395,8 +2298,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "60 to 90 minutes;sixty to ninety minutes;about 90 minutes;appointment is 60 to 90 minutes;consultation takes about an hour",
-                "fail_description": "cannot do 90 minutes;only have 20 minutes;too long"
+                "pass_description": "60 to 90 minutes; sixty to ninety minutes; about 90 minutes; appointment is 60 to 90 minutes; consultation takes about an hour",
+                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
               },
               {
                 "name": "Approved Time Slot",
@@ -2409,28 +2312,10 @@
                 "negative_patterns": [
                   "\\b10\\s+AM\\s+only\\b",
                   "\\b2\\s+PM\\s+only\\b",
-                  "\\bsame\\s+day\\b",
                   "\\boutside\\s+9\\s+1\\s+or\\s+5\\b"
                 ],
-                "pass_description": "9 AM;1 PM;5 PM;nine AM;one PM;five PM",
-                "fail_description": "10 AM only;2 PM only;same day;outside 9 1 or 5"
-              },
-              {
-                "name": "No Same Day",
-                "type": null,
-                "positive_patterns": [
-                  "\\bno\\s+same\\s+day\\b",
-                  "\\btomorrow\\s+works\\b",
-                  "\\blater\\s+this\\s+week\\b",
-                  "\\bwithin\\s+72\\s+hours\\b",
-                  "\\bnext\\s+available\\b"
-                ],
-                "negative_patterns": [
-                  "\\btoday\\s+only\\b",
-                  "\\bsame\\s+day\\s+appointment\\b"
-                ],
-                "pass_description": "no same day;tomorrow works;later this week;within 72 hours;next available",
-                "fail_description": "today only;same day appointment"
+                "pass_description": "9 AM; 1 PM; 5 PM; nine AM; one PM; five PM",
+                "fail_description": "10 AM only; 2 PM only; outside 9 1 or 5"
               }
             ]
           }
@@ -2443,7 +2328,6 @@
           "Confirmed Phone",
           "Decision Makers",
           "Homeowner confirmed",
-          "No Same Day",
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Roof Age Or Wear",
@@ -2598,8 +2482,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed;confirmed address;yes that is my address;that is the correct address;I live at;property address is",
-                "fail_description": "wrong address;that is not my address;I do not live there"
+                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
+                "fail_description": "wrong address; that is not my address; I do not live there"
               },
               {
                 "name": "Confirmed Email",
@@ -2618,8 +2502,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed;confirmed email;yes that is my email;best email is;send it to my email;email address is",
-                "fail_description": "wrong email;I do not have email;no email"
+                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
+                "fail_description": "wrong email; I do not have email; no email"
               },
               {
                 "name": "Confirmed Phone",
@@ -2640,8 +2524,8 @@
                   "\\bnot\\s+my\\s+phone\\s+number\\b",
                   "\\bthat\\s+is\\s+not\\s+my\\s+number\\b"
                 ],
-                "pass_description": "phone number is;best number is;call me at;this is my cell;this number is good;same phone number;you can reach me at;my number is",
-                "fail_description": "wrong number;do not call this number;bad number;not my phone number;that is not my number"
+                "pass_description": "phone number is; best number is; call me at; this is my cell; this number is good; same phone number; you can reach me at; my number is",
+                "fail_description": "wrong number; do not call this number; bad number; not my phone number; that is not my number"
               },
               {
                 "name": "Exterior Material",
@@ -2656,7 +2540,7 @@
                   "\\boutside\\s+is\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "vinyl siding;brick exterior;wood exterior;aluminum siding;stucco;exterior is;outside is"
+                "pass_description": "vinyl siding; brick exterior; wood exterior; aluminum siding; stucco; exterior is; outside is"
               },
               {
                 "name": "Garage Type",
@@ -2668,7 +2552,7 @@
                   "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "attached garage;detached garage;garage is attached;garage is detached;no garage"
+                "pass_description": "attached garage; detached garage; garage is attached; garage is detached; no garage"
               },
               {
                 "name": "Window Count",
@@ -2682,7 +2566,7 @@
                   "\\bno\\s+minimum\\s+window\\s+requirement\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "one window;two windows;three windows;how many windows;replace all windows;no minimum window requirement"
+                "pass_description": "one window; two windows; three windows; how many windows; replace all windows; no minimum window requirement"
               },
               {
                 "name": "Decision Makers",
@@ -2696,8 +2580,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers;spouse will be there;husband will be there;wife will be there;both of us will be present;everyone will be there;Refused",
-                "fail_description": "decision maker cannot attend;spouse will not be there;owner will not be there",
+                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there; Refused",
+                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there",
                 "mishear_description": "refuse -> Refused"
               },
               {
@@ -2713,8 +2597,8 @@
                   "\\bonly\\s+have\\s+20\\s+minutes\\b",
                   "\\btoo\\s+long\\b"
                 ],
-                "pass_description": "60 to 90 minutes;sixty to ninety minutes;appointment is 60 to 90 minutes;consultation takes about an hour;about 90 minutes",
-                "fail_description": "can not do 90 minutes;only have 20 minutes;too long"
+                "pass_description": "60 to 90 minutes; sixty to ninety minutes; appointment is 60 to 90 minutes; consultation takes about an hour; about 90 minutes",
+                "fail_description": "can not do 90 minutes; only have 20 minutes; too long"
               },
               {
                 "name": "Vinyl Disclaimer",
@@ -2735,8 +2619,8 @@
                   "\\bstorm\\s+windows\\b",
                   "\\bstorm\\s+window\\b"
                 ],
-                "pass_description": "vinyl disclaimer;windows are vinyl;Feldco windows are vinyl;read the vinyl disclaimer;vinyl window disclaimer from CRM;100% vinyl windows",
-                "fail_description": "aluminum windows;wood windows;storm windows only;did not read disclaimer;storm windows;storm window",
+                "pass_description": "vinyl disclaimer; windows are vinyl; Feldco windows are vinyl; read the vinyl disclaimer; vinyl window disclaimer from CRM; 100% vinyl windows",
+                "fail_description": "aluminum windows; wood windows; storm windows only; did not read disclaimer; storm windows; storm window",
                 "mishear_description": "final disclaimer -> vinyl disclaimer"
               },
               {
@@ -2758,7 +2642,7 @@
                   "\\brenter\\b",
                   "\\btenant\\b"
                 ],
-                "fail_description": "roofing;siding;storm door;storm doors;storm windows only;storm window;storm windows;repair only;glass only;single wide mobile home;renting;renter;tenant",
+                "fail_description": "roofing; siding; storm door; storm doors; storm windows only; storm window; storm windows; repair only; glass only; single wide mobile home; renting; renter; tenant",
                 "mishear_description": "single-wide -> single wide;store door -> storm door;double-wide -> double wide;store window -> storm window"
               },
               {
@@ -2775,8 +2659,8 @@
                   "\\bSaturday\\s+after\\s+5\\s+PM\\b",
                   "\\boutside\\s+appointment\\s+times\\b"
                 ],
-                "pass_description": "12:30;3:30;6:30;10:30;1:30;4:30;9:30",
-                "fail_description": "Sunday;after 5 Friday for Saturday;Saturday after 5 PM;outside appointment times",
+                "pass_description": "12:30; 3:30; 6:30; 10:30; 1:30; 4:30; 9:30",
+                "fail_description": "Sunday; after 5 Friday for Saturday; Saturday after 5 PM; outside appointment times",
                 "mishear_description": "twelve thirty -> 12:30;three thirty -> 3:30;six thirty -> 6:30;ten thirty -> 10:30"
               }
             ]

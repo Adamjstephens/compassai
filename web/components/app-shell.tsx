@@ -44,6 +44,7 @@ import {
   type MissedOpportunityAnalysis,
   type MissedOpportunityModelPayload,
 } from "@/lib/missed-opportunities";
+import { resolveQaStatus, sanitizeScorecardLibrary, timestampSeconds, transcriptEvidenceExcerpt, validTimestampForDuration } from "@/lib/qa-safety";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -156,7 +157,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -339,13 +340,6 @@ function freeAlerts(text: string) {
   return alerts;
 }
 
-function timestampSeconds(value = "") {
-  const parts = value.trim().split(":").map(Number);
-  if ((parts.length !== 2 && parts.length !== 3) || parts.some((part) => !Number.isFinite(part) || part < 0)) return null;
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return parts[0] * 3600 + parts[1] * 60 + parts[2];
-}
-
 function normalizeTransfer(raw: unknown, transcript: string, duration = 0): TransferAnalysis {
   if (!raw || typeof raw !== "object") {
     return { occurred: false, status: "No transfer detected", time: "", snippet: "", notes: "" };
@@ -353,12 +347,8 @@ function normalizeTransfer(raw: unknown, transcript: string, duration = 0): Tran
   const value = raw as Partial<TransferAnalysis>;
   const occurred = value.occurred === true;
   const snippet = String(value.snippet || "").replace(/\s+/g, " ").trim();
-  const suppliedTime = String(value.time || "").trim();
-  const time = occurred && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(suppliedTime)
-    ? suppliedTime
-    : occurred && snippet
-      ? timeForSnippet(transcript, snippet, duration)
-      : "";
+  // Plain transcription responses do not contain real timing metadata.
+  const time = "";
   return {
     occurred,
     status: occurred ? `Transfer detected${time ? ` at ${time}` : ""}` : "No transfer detected",
@@ -523,7 +513,10 @@ function rowToRule(row: RubricRow, fallbackType: string): ScorecardRule {
 }
 
 function bundleFromRubricRows(original: Record<string, unknown>, name: string, rows: RubricRow[]) {
-  const usable = rows.filter((row) => row.client_name.trim() || row.qualifier_name.trim());
+  const usable = rows.filter((row) => {
+    const qualifier = ruleKey(row.qualifier_name);
+    return qualifier && qualifier !== "new qualifier" && qualifier !== "no same day" && qualifier !== "booked correct calendar";
+  });
   const clientMap = new Map<string, { aliases: Set<string>; rules: ScorecardRule[] }>();
   const universalRules: ScorecardRule[] = [];
   const criticalChecks: string[] = [];
@@ -561,6 +554,7 @@ function bundleFromRubricRows(original: Record<string, unknown>, name: string, r
 }
 
 function normalizeScorecardLibrary(library: ScorecardLibrary): ScorecardLibrary {
+  library = sanitizeScorecardLibrary(library);
   const seen = new Set<string>();
   const scorecards = (library.scorecards ?? [])
     .filter((entry) => entry && entry.bundle)
@@ -587,26 +581,21 @@ function activeScorecard(library: ScorecardLibrary) {
 }
 
 function timeForSnippet(text: string, snippet: string, duration = 0) {
-  if (!duration || !snippet) return "00:00";
-  const index = text.toLowerCase().indexOf(snippet.slice(0, 24).toLowerCase());
-  const ratio = index >= 0 ? index / Math.max(text.length, 1) : 0;
-  const seconds = Math.max(0, Math.round(duration * ratio));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  void text;
+  void snippet;
+  void duration;
+  return "";
 }
 
 function evidenceFromTranscript(transcript: string, proposed: string, fallback: AnalysisRow | undefined, duration = 0) {
   const clean = proposed.replace(/\s+/g, " ").trim();
-  const exact = clean && transcript.toLowerCase().includes(clean.toLowerCase()) ? snippetFor(transcript, clean) : "";
-  if (exact) {
-    return { result: exact, evidence_time: timeForSnippet(transcript, exact, duration), verifiedForPass: true, source: "model" as const };
+  const excerpt = transcriptEvidenceExcerpt(transcript, clean);
+  if (excerpt) {
+    const result = snippetFor(transcript, excerpt);
+    return { result, evidence_time: "", verifiedForPass: true, source: "model" as const };
   }
   if (fallback?.result && !/^No clear evidence/i.test(fallback.result)) {
     return { result: fallback.result, evidence_time: fallback.evidence_time, verifiedForPass: fallback.status === "Pass", source: "scanner" as const };
-  }
-  const quoted = /["“]([^"”]{8,120})["”]/.exec(proposed)?.[1] ?? "";
-  const quoteSnippet = quoted ? snippetFor(transcript, quoted) : "";
-  if (quoteSnippet) {
-    return { result: quoteSnippet, evidence_time: timeForSnippet(transcript, quoteSnippet, duration), verifiedForPass: true, source: "model" as const };
   }
   return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "", verifiedForPass: false, source: "unverified" as const };
 }
@@ -633,44 +622,21 @@ function evidenceIsTranscriptBacked(transcript: string, evidence: string) {
   return needle.length >= 4 && haystack.includes(needle);
 }
 
-export function criticalPassPolicySatisfied(check: string, transcript: string) {
-  if (ruleKey(check) !== ruleKey("Government Grant Disclosure")) return true;
-  const text = transcript.replace(/\s+/g, " ").trim().toLowerCase();
-  const disclosureStart = text.search(/government\s+(?:assistance|grant|program|aid|fund)|free\s+windows?/i);
-  if (disclosureStart < 0) return false;
-  const disclosure = text.slice(Math.max(0, disclosureStart - 180), disclosureStart + 900);
-  const mentionsProgram = /government\s+(?:assistance|grant|program|aid|fund)|free\s+windows?/.test(disclosure);
-  const statesNonParticipation = /(?:do\s+not|don't|does\s+not|doesn't|not)\s+(?:participate|offer|provide|cover).{0,100}(?:government|free\s+windows?)|(?:government|free\s+windows?).{0,100}(?:not\s+offered|not\s+provided|not\s+covered)/.test(disclosure);
-  const assignsHomeownerCost = /(?:all\s+)?costs?.{0,100}(?:homeowner|customer|you)|(?:homeowner|customer|you).{0,100}(?:responsible|pay|costs?)/.test(disclosure);
-  const customerAcknowledges = /(?:homeowner|customer|you).{0,320}\b(?:yes|yeah|yep|okay|ok|understand|correct|right|that's\s+fine|that\s+is\s+fine)\b/.test(disclosure);
-  return mentionsProgram && statesNonParticipation && assignsHomeownerCost && customerAcknowledges;
-}
-
 export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
   const modelByCheck = new Map(rows.map((row) => [ruleKey(row.check), row]));
   return ruleRows.map((fallback) => {
     const row = modelByCheck.get(ruleKey(fallback.check));
     const evidence = evidenceFromTranscript(transcript, row?.result || fallback.result || "", fallback, duration);
-    const modelTime = String(row?.evidence_time || "");
     const category = fallback.category || row?.category || "Qualifier";
-    let status = canonicalStatus(row?.status || fallback.status);
     const critical = isCriticalCategory(category);
-    if (
-      (critical && status === "Not applicable")
-      || (status === "Pass" && (
-        !evidence.verifiedForPass
-        || (critical && (evidence.source !== "model" || !criticalPassPolicySatisfied(fallback.check, transcript)))
-      ))
-    ) {
-      status = "Needs review";
-    }
+    const status = resolveQaStatus(row?.status || fallback.status, critical, evidence.verifiedForPass);
     return {
       category,
       check: fallback.check.replace(/^Critical:\s*/i, ""),
       status,
       passed: status === "Pass",
       result: evidence.result,
-      evidence_time: /^\d{1,2}:\d{2}(?::\d{2})?$/.test(modelTime) && modelTime !== "00:00" ? modelTime : evidence.evidence_time,
+      evidence_time: "",
     };
   });
 }
@@ -835,14 +801,14 @@ function editorRows(rows: AnalysisRow[]): EditorRow[] {
 
 function applyOverrides(result: JobResult, overrides = result.qa_overrides ?? [], finalGrade = result.metrics?.final_grade ?? "Approved") {
   const hardenedOverrides = overrides.map((row) => {
-    if (!isCriticalCategory(row.Category)) return row;
-    const evidenceIsClear = evidenceIsTranscriptBacked(result.transcript_text, row.Evidence)
-      && criticalPassPolicySatisfied(row.Qualifier, result.transcript_text);
+    const safeTime = validTimestampForDuration(row.Time, result.duration_seconds ?? 0) ? row.Time : "";
+    if (!isCriticalCategory(row.Category)) return { ...row, Time: safeTime };
+    const evidenceIsClear = evidenceIsTranscriptBacked(result.transcript_text, row.Evidence);
     const harden = (status: string) => {
       const canonical = canonicalStatus(status);
       return canonical === "Not applicable" || (canonical === "Pass" && !evidenceIsClear) ? "Needs review" : canonical;
     };
-    return { ...row, "System status": harden(row["System status"]), "Final status": harden(row["Final status"]) };
+    return { ...row, Time: safeTime, "System status": harden(row["System status"]), "Final status": harden(row["Final status"]) };
   });
   const rows = hardenedOverrides.map((row) => ({
     category: row.Category,
@@ -952,7 +918,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a strict QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Return every configured scorecard criterion exactly once; never omit a criterion. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include the best MM:SS timestamp, exact short evidence snippet, and a concise explanation. For Critical criteria, Not applicable is forbidden: use Pass only with an exact supporting transcript quote, Fail when the failure is supported, and Needs review when evidence is missing or ambiguous. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Never award a critical Pass without transcript evidence. Do not include full transcripts.",
+            "You are a strict QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Return every configured scorecard criterion exactly once; never omit a criterion. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include an exact short evidence snippet and concise explanation. This transcript has no real timing metadata, so transfer.time and every evidence_time must be an empty string; never estimate or invent a timestamp. For Critical criteria, Not applicable is forbidden: use Pass when an exact supporting transcript quote clearly satisfies the criterion, Fail when the failure is supported, and Needs review only when evidence is missing or ambiguous. An evidence-backed Critical Pass must remain Pass. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Never award a critical Pass without transcript evidence. Do not include full transcripts.",
         },
         {
           role: "user",
@@ -1317,7 +1283,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       .then((response) => response.json())
       .then((library: ScorecardLibrary) => {
         const stored = window.localStorage.getItem(SCORECARD_STORAGE);
-        setScorecards(normalizeScorecardLibrary(stored ? JSON.parse(stored) : library));
+        const normalized = normalizeScorecardLibrary(stored ? JSON.parse(stored) : library);
+        setScorecards(normalized);
+        if (stored) window.localStorage.setItem(SCORECARD_STORAGE, JSON.stringify(normalized));
       })
       .catch((caught) => setError(`Scorecards failed to load: ${caught instanceof Error ? caught.message : String(caught)}`));
   }, [refresh]);
