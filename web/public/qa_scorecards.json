@@ -116,7 +116,9 @@
                   "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bAppointment\\s+length\\s+not\\s+specified\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
                 "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
                 "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
@@ -152,14 +154,18 @@
                 "name": "Number Confirmed",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\b(?:phone|cell|contact)\\s+number.{0,80}\\b(?:correct|confirmed|right|yes|yeah|yep)\\b"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+phone\\s+number\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "Phone Number is confirmed",
-                "fail_description": "no questions in regard to phone number and it's accuracy asked"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Government Grant Disclosure",
@@ -463,22 +469,32 @@
                 "name": "Phone Confirmed",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bnot\\s+my\\s+number\\b",
-                  "\\bdifferent\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone number is correct; that is my number; best number; call me at; confirmed number; yes that is the right number",
-                "fail_description": "wrong number; not my number; different number; do not call this number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+              },
+              {
+                "name": "Appointment Length",
+                "positive_patterns": [
+                  "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
+                ],
+                "negative_patterns": [
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
+                ],
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               }
             ]
           }
@@ -489,7 +505,8 @@
           "Homeowner confirmed",
           "No unapproved projects",
           "Project Size",
-          "Recorded line confirmed"
+          "Recorded line confirmed",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -715,20 +732,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
-                "fail_description": "wrong number; do not call this number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Decision Makers",
@@ -850,16 +865,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "90 minutes; about 90 minutes; approximately 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "Approved Time Slot",
@@ -891,7 +905,8 @@
           "Insurance Adjuster",
           "No Unapproved Projects",
           "Recorded line confirmed",
-          "Roof Age Or Damage"
+          "Roof Age Or Damage",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -1073,20 +1088,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
-                "fail_description": "wrong number; do not call this number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Decision Makers",
@@ -1207,16 +1220,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "90 minutes; about 90 minutes; approximately 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "Approved Time Slot",
@@ -1248,7 +1260,8 @@
           "Insurance Adjuster",
           "No Unapproved Projects",
           "Recorded line confirmed",
-          "Roof Age Or Damage"
+          "Roof Age Or Damage",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -1430,20 +1443,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
-                "fail_description": "wrong number; do not call this number",
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1547,16 +1558,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "60 to 90 minutes; sixty to ninety minutes; about 90 minutes; appointment is 60 to 90 minutes; consultation takes about an hour",
-                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long",
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               }
             ]
@@ -1572,7 +1582,8 @@
           "No Metal Roofing",
           "No Unapproved Projects",
           "Recorded line confirmed",
-          "Repair Roof Age"
+          "Repair Roof Age",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -1796,20 +1807,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
-                "fail_description": "wrong number; do not call this number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Decision Makers",
@@ -1932,16 +1941,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "90 minutes; about 90 minutes; 60 to 90 minutes; appointment is 90 minutes; consultation takes about 90 minutes",
-                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "Approved Time Slot",
@@ -1971,7 +1979,8 @@
           "Insurance Adjuster",
           "No Unapproved Projects",
           "Recorded line confirmed",
-          "Roof Age Or Damage"
+          "Roof Age Or Damage",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -2161,20 +2170,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone confirmed; confirmed phone; best number is; call me at; this is my cell; yes this number is good",
-                "fail_description": "wrong number; do not call this number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Decision Makers",
@@ -2290,16 +2297,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcannot\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "60 to 90 minutes; sixty to ninety minutes; about 90 minutes; appointment is 60 to 90 minutes; consultation takes about an hour",
-                "fail_description": "cannot do 90 minutes; only have 20 minutes; too long"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "Approved Time Slot",
@@ -2331,7 +2337,8 @@
           "No Unapproved Projects",
           "Recorded line confirmed",
           "Roof Age Or Wear",
-          "Storm Claim Adjuster"
+          "Storm Claim Adjuster",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -2509,23 +2516,18 @@
                 "name": "Confirmed Phone",
                 "type": null,
                 "positive_patterns": [
-                  "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
+                  "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+                  "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+                  "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+                  "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
                 ],
                 "negative_patterns": [
-                  "\\bwrong\\s+number\\b",
-                  "\\bdo\\s+not\\s+call\\s+this\\s+number\\b",
-                  "\\bbad\\s+number\\b",
-                  "\\bnot\\s+my\\s+phone\\s+number\\b",
-                  "\\bthat\\s+is\\s+not\\s+my\\s+number\\b"
+                  "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+                  "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+                  "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "phone number is; best number is; call me at; this is my cell; this number is good; same phone number; you can reach me at; my number is",
-                "fail_description": "wrong number; do not call this number; bad number; not my phone number; that is not my number"
+                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
               },
               {
                 "name": "Exterior Material",
@@ -2589,16 +2591,15 @@
                 "type": null,
                 "positive_patterns": [
                   "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
-                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|six\\s*ty|nine*ty)\\b",
-                  "\\b\\d{2,3}\\s*(?:min|minutes|mins)\\b"
+                  "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
                 ],
                 "negative_patterns": [
-                  "\\bcan\\s+not\\s+do\\s+90\\s+minutes\\b",
-                  "\\bonly\\s+have\\s+20\\s+minutes\\b",
-                  "\\btoo\\s+long\\b"
+                  "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+                  "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "60 to 90 minutes; sixty to ninety minutes; appointment is 60 to 90 minutes; consultation takes about an hour; about 90 minutes",
-                "fail_description": "can not do 90 minutes; only have 20 minutes; too long"
+                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
               },
               {
                 "name": "Vinyl Disclaimer",
@@ -2675,7 +2676,8 @@
           "Decision Makers",
           "Homeowner confirmed",
           "Recorded line confirmed",
-          "Vinyl Disclaimer"
+          "Vinyl Disclaimer",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {
@@ -2885,12 +2887,43 @@
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
             "negative_patterns": []
+          },
+          {
+            "name": "Appointment Length",
+            "positive_patterns": [
+              "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+              "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b"
+            ],
+            "negative_patterns": [
+              "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+              "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+              "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
+            ],
+            "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+            "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+          },
+          {
+            "name": "Phone Number Confirmed",
+            "positive_patterns": [
+              "\\b(?:is|at|on)\\s+(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9}).{0,80}\\b(?:correct|right|best|good|still\\s+your)\\b.{0,100}\\b(?:yes|yeah|yep|correct|right|that\\s+is|it\\s+is)\\b",
+              "\\b(?:phone|cell|contact|callback|best)\\s*(?:phone\\s*)?number\\b.{0,160}(?:(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})|\\b(?:correct|right|good|best|confirmed)\\b.{0,80}\\b(?:yes|yeah|yep|correct|right)\\b)",
+              "\\b(?:call|reach|contact)\\s+me\\s+(?:at|on).{0,50}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b",
+              "\\bmy\\s+(?:phone|cell|contact)?\\s*number\\s+is.{0,40}(?:(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})\\b"
+            ],
+            "negative_patterns": [
+              "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+              "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+              "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
+            ],
+            "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+            "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
           }
         ],
         "client_rule_sets": {},
         "critical_checks": [
           "Homeowner confirmed",
-          "Recorded line confirmed"
+          "Recorded line confirmed",
+          "Appointment Length"
         ],
         "normalization_aliases": [
           {

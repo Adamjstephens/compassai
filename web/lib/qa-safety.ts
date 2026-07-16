@@ -21,6 +21,40 @@ type LibraryLike = {
 
 const REMOVED_CRITERIA = new Set(["no same day", "booked correct calendar", "new qualifier"]);
 
+export const APPOINTMENT_LENGTH_RULE: RuleLike = {
+  name: "Appointment Length",
+  positive_patterns: [
+    "\\b(?:60|90)\\s*(?:to|-|and)?\\s*(?:60|90)?\\s*(?:minutes|minute|mins|min)\\b",
+    "\\b(?:an?\\s+hour|hour\\s+and\\s+a\\s+half|sixty|ninety)\\s*(?:minutes?)?\\b",
+  ],
+  negative_patterns: [
+    "\\b(?:cannot|can't|can\\s+not)\\s+(?:do|stay|be\\s+there\\s+for).{0,30}(?:60|90)\\s*(?:minutes|minute|mins|min)\\b",
+    "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
+    "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b",
+  ],
+  pass_description: "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
+  fail_description: "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass.",
+};
+
+const PHONE_VALUE_PATTERN = String.raw`(?:(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})`;
+
+export const PHONE_CONFIRMATION_RULE: RuleLike = {
+  name: "Phone Number Confirmed",
+  positive_patterns: [
+    String.raw`\b(?:is|at|on)\s+${PHONE_VALUE_PATTERN}.{0,80}\b(?:correct|right|best|good|still\s+your)\b.{0,100}\b(?:yes|yeah|yep|correct|right|that\s+is|it\s+is)\b`,
+    String.raw`\b(?:phone|cell|contact|callback|best)\s*(?:phone\s*)?number\b.{0,160}(?:${PHONE_VALUE_PATTERN}|\b(?:correct|right|good|best|confirmed)\b.{0,80}\b(?:yes|yeah|yep|correct|right)\b)`,
+    String.raw`\b(?:call|reach|contact)\s+me\s+(?:at|on).{0,50}${PHONE_VALUE_PATTERN}\b`,
+    String.raw`\bmy\s+(?:phone|cell|contact)?\s*number\s+is.{0,40}${PHONE_VALUE_PATTERN}\b`,
+  ],
+  negative_patterns: [
+    "\\b(?:wrong|bad|different|incorrect)\\s+(?:phone\\s+)?number\\b",
+    "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
+    "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b",
+  ],
+  pass_description: "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
+  fail_description: "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed.",
+};
+
 function criterionKey(value = "") {
   return value.toLowerCase().replace(/^critical\s*:\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -36,13 +70,19 @@ function cleanDescription(value: unknown) {
 }
 
 function cleanRule(rule: RuleLike): RuleLike {
-  return {
+  const cleaned = {
     ...rule,
     positive_patterns: (rule.positive_patterns ?? []).filter((pattern) => !isSameDayInstruction(pattern)),
     negative_patterns: (rule.negative_patterns ?? []).filter((pattern) => !isSameDayInstruction(pattern)),
     pass_description: cleanDescription(rule.pass_description) as string | undefined,
     fail_description: cleanDescription(rule.fail_description) as string | undefined,
   };
+  const key = criterionKey(rule.name);
+  if (key === "appointment length") return { ...cleaned, ...APPOINTMENT_LENGTH_RULE, name: rule.name || APPOINTMENT_LENGTH_RULE.name };
+  if ((key.includes("phone") || key.includes("number")) && key.includes("confirm")) {
+    return { ...cleaned, ...PHONE_CONFIRMATION_RULE, name: rule.name || PHONE_CONFIRMATION_RULE.name };
+  }
+  return cleaned;
 }
 
 function cleanRules(rules: RuleLike[] = [], inherited = new Set<string>()) {
@@ -58,12 +98,29 @@ function cleanRules(rules: RuleLike[] = [], inherited = new Set<string>()) {
 export function sanitizeScorecardLibrary<T extends LibraryLike>(library: T): T {
   const scorecards = (library.scorecards ?? []).map((entry) => {
     const bundle = entry.bundle ?? {};
-    const universalRules = cleanRules(bundle.universal_rules);
+    let universalRules = cleanRules(bundle.universal_rules);
     const universalNames = new Set(universalRules.map((rule) => criterionKey(rule.name)));
-    const clientRuleSets = Object.fromEntries(Object.entries(bundle.client_rule_sets ?? {}).map(([key, set]) => [
+    let clientRuleSets = Object.fromEntries(Object.entries(bundle.client_rule_sets ?? {}).map(([key, set]) => [
       key,
       { ...set, rules: cleanRules(set.rules, universalNames) },
     ]));
+    if (Object.keys(clientRuleSets).length) {
+      clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => {
+        const rules = [...(set.rules ?? [])];
+        const names = new Set([...universalRules, ...rules].map((rule) => criterionKey(rule.name)));
+        if (!names.has("appointment length")) rules.push({ ...APPOINTMENT_LENGTH_RULE });
+        if (![...names].some((name) => (name.includes("phone") || name.includes("number")) && name.includes("confirm"))) {
+          rules.push({ ...PHONE_CONFIRMATION_RULE });
+        }
+        return [key, { ...set, rules }];
+      }));
+    } else {
+      const names = new Set(universalRules.map((rule) => criterionKey(rule.name)));
+      if (!names.has("appointment length")) universalRules = [...universalRules, { ...APPOINTMENT_LENGTH_RULE }];
+      if (![...names].some((name) => (name.includes("phone") || name.includes("number")) && name.includes("confirm"))) {
+        universalRules = [...universalRules, { ...PHONE_CONFIRMATION_RULE }];
+      }
+    }
     const criticalSeen = new Set<string>();
     const criticalChecks = (bundle.critical_checks ?? []).flatMap((check) => {
       const name = typeof check === "string" ? check : check.name;
@@ -72,6 +129,7 @@ export function sanitizeScorecardLibrary<T extends LibraryLike>(library: T): T {
       criticalSeen.add(key);
       return [typeof check === "string" ? check : cleanRule(check)];
     });
+    if (!criticalSeen.has("appointment length")) criticalChecks.push("Appointment Length");
     return { ...entry, bundle: { ...bundle, universal_rules: universalRules, client_rule_sets: clientRuleSets, critical_checks: criticalChecks } };
   });
   return { ...library, scorecards } as T;
@@ -115,17 +173,41 @@ export function pairModelRows<T extends Record<string, unknown>>(rows: T[], chec
     const key = qaRowKey({ check });
     let index = rows.findIndex((row, candidateIndex) => !used.has(candidateIndex) && qaRowKey(row) === key);
     if (index < 0) {
-      index = rows.findIndex((row, candidateIndex) => {
-        if (used.has(candidateIndex)) return false;
+      const candidates = rows.flatMap((row, candidateIndex) => {
+        if (used.has(candidateIndex)) return [];
         const candidate = qaRowKey(row);
-        return candidate.length >= 5 && (candidate.includes(key) || key.includes(candidate));
+        return candidate.length >= 5 && (candidate.includes(key) || key.includes(candidate)) ? [candidateIndex] : [];
       });
+      if (candidates.length === 1) index = candidates[0];
     }
-    if (index < 0 && rows.length === checks.length && !used.has(checkIndex)) index = checkIndex;
     if (index < 0) return undefined;
     used.add(index);
     return rows[index];
   });
+}
+
+export function isPhoneConfirmationCriterion(value = "") {
+  const key = criterionKey(value);
+  return (key.includes("phone") || key.includes("number")) && key.includes("confirm");
+}
+
+export function phoneConfirmationExcerpt(transcript: string) {
+  const text = transcript.replace(/\s+/g, " ").trim();
+  const candidates: Array<{ evidence: string; confirmed: boolean; index: number }> = [];
+  for (const [confirmed, patterns] of [
+    [false, PHONE_CONFIRMATION_RULE.negative_patterns ?? []],
+    [true, PHONE_CONFIRMATION_RULE.positive_patterns ?? []],
+  ] as const) {
+    for (const pattern of patterns) {
+      const expression = new RegExp(pattern, "gi");
+      let match = expression.exec(text);
+      while (match?.[0]) {
+        candidates.push({ evidence: match[0].trim(), confirmed, index: match.index });
+        match = expression.exec(text);
+      }
+    }
+  }
+  return candidates.sort((left, right) => right.index - left.index)[0] ?? { evidence: "", confirmed: false };
 }
 
 function escaped(value: string) {

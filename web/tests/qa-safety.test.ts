@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pairModelRows, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
+import { isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
 
 test("scorecard cleanup removes prohibited, duplicate, and same-day instructions", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ bundle: {
@@ -14,10 +14,10 @@ test("scorecard cleanup removes prohibited, duplicate, and same-day instructions
   } }] });
   const bundle = library.scorecards?.[0]?.bundle;
   assert.deepEqual(bundle?.universal_rules?.map((rule) => rule.name), ["Recorded line"]);
-  assert.deepEqual(bundle?.client_rule_sets?.client.rules?.map((rule) => rule.name), ["Appointment time"]);
+  assert.deepEqual(bundle?.client_rule_sets?.client.rules?.map((rule) => rule.name), ["Appointment time", "Appointment Length", "Phone Number Confirmed"]);
   assert.equal(bundle?.client_rule_sets?.client.rules?.[0]?.fail_description, "outside approved hours");
   assert.deepEqual(bundle?.client_rule_sets?.client.rules?.[0]?.negative_patterns, ["outside approved hours"]);
-  assert.deepEqual(bundle?.critical_checks, ["Appointment time"]);
+  assert.deepEqual(bundle?.critical_checks, ["Appointment time", "Appointment Length"]);
 });
 
 test("clear transcript evidence is recovered from an explanatory model response", () => {
@@ -49,4 +49,36 @@ test("model rows are paired despite harmless criterion naming changes", () => {
   const paired = pairModelRows(rows, ["Recorded line confirmed", "Address confirmed"]);
   assert.equal(paired[0], rows[0]);
   assert.equal(paired[1], rows[1]);
+});
+
+test("model rows are never paired by position when criterion names are unrelated", () => {
+  const creditScore = { criterion: "Credit score", status: "Pass", result: "Customer said their score is 720." };
+  const paired = pairModelRows([creditScore], ["Phone Number Confirmed"]);
+  assert.equal(paired[0], undefined);
+});
+
+test("phone confirmation requires phone-specific evidence", () => {
+  assert.equal(isPhoneConfirmationCriterion("Confirmed Phone"), true);
+  assert.deepEqual(phoneConfirmationExcerpt("Agent: Your credit score is 720. Customer: Correct."), { evidence: "", confirmed: false });
+  assert.deepEqual(phoneConfirmationExcerpt("Agent: Do you have a phone number? Customer: Yes."), { evidence: "", confirmed: false });
+  const confirmed = phoneConfirmationExcerpt("Agent: Is 610 304 2170 still the best phone number? Customer: Yes, correct.");
+  assert.equal(confirmed.confirmed, true);
+  assert.match(confirmed.evidence, /phone number.*yes.*correct/i);
+  assert.equal(phoneConfirmationExcerpt("Customer: You can reach me at (610) 304-2170.").confirmed, true);
+});
+
+test("every scorecard receives appointment length and phone confirmation rules", () => {
+  const library = sanitizeScorecardLibrary({ scorecards: [
+    { bundle: { universal_rules: [], client_rule_sets: { pella: { rules: [{ name: "Phone Confirmed", positive_patterns: ["email", "credit score"] }] } }, critical_checks: [] } },
+    { bundle: { universal_rules: [], client_rule_sets: {}, critical_checks: [] } },
+  ] });
+  for (const scorecard of library.scorecards ?? []) {
+    const bundle = scorecard.bundle ?? {};
+    const rules = [...(bundle.universal_rules ?? []), ...Object.values(bundle.client_rule_sets ?? {}).flatMap((set) => set.rules ?? [])];
+    assert.equal(rules.some((rule) => rule.name === "Appointment Length"), true);
+    const phone = rules.find((rule) => isPhoneConfirmationCriterion(rule.name));
+    assert.ok(phone);
+    assert.equal(phone.positive_patterns?.some((pattern) => /email|credit score/i.test(pattern)), false);
+    assert.equal((bundle.critical_checks ?? []).includes("Appointment Length"), true);
+  }
 });
