@@ -89,15 +89,43 @@ export function validTimestampForDuration(value = "", duration = 0) {
   return seconds !== null && duration > 0 && seconds <= Math.ceil(duration) + 2;
 }
 
-export function resolveQaStatus(requestedStatus: string, critical: boolean, evidenceVerified: boolean) {
+export function resolveQaStatus(requestedStatus: string, critical: boolean, evidenceVerified: boolean, fallbackStatus = "") {
   const normalized = requestedStatus.trim().toLowerCase();
-  const status = normalized === "pass" ? "Pass"
+  let status = normalized === "pass" ? "Pass"
     : normalized === "fail" ? "Fail"
       : normalized === "not applicable" || normalized === "n/a" || normalized === "na" ? "Not applicable"
         : "Needs review";
+  const fallback = fallbackStatus.trim().toLowerCase();
+  if (status === "Needs review" && evidenceVerified && (fallback === "pass" || fallback === "fail")) {
+    status = fallback === "pass" ? "Pass" : "Fail";
+  }
   if (critical && status === "Not applicable") return "Needs review";
   if (status === "Pass" && !evidenceVerified) return "Needs review";
   return status;
+}
+
+function qaRowKey(row: Record<string, unknown>) {
+  const value = row.check ?? row.qualifier ?? row.Qualifier ?? row.criterion ?? row.name ?? "";
+  return String(value).toLowerCase().replace(/^critical\s*:\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function pairModelRows<T extends Record<string, unknown>>(rows: T[], checks: string[]) {
+  const used = new Set<number>();
+  return checks.map((check, checkIndex) => {
+    const key = qaRowKey({ check });
+    let index = rows.findIndex((row, candidateIndex) => !used.has(candidateIndex) && qaRowKey(row) === key);
+    if (index < 0) {
+      index = rows.findIndex((row, candidateIndex) => {
+        if (used.has(candidateIndex)) return false;
+        const candidate = qaRowKey(row);
+        return candidate.length >= 5 && (candidate.includes(key) || key.includes(candidate));
+      });
+    }
+    if (index < 0 && rows.length === checks.length && !used.has(checkIndex)) index = checkIndex;
+    if (index < 0) return undefined;
+    used.add(index);
+    return rows[index];
+  });
 }
 
 function escaped(value: string) {

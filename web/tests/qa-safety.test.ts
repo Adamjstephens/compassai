@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
+import { pairModelRows, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
 
 test("scorecard cleanup removes prohibited, duplicate, and same-day instructions", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ bundle: {
@@ -37,4 +37,16 @@ test("an evidence-backed critical Pass is guaranteed to remain Pass", () => {
   assert.equal(resolveQaStatus("Pass", true, true), "Pass");
   assert.equal(resolveQaStatus("Pass", true, false), "Needs review");
   assert.equal(resolveQaStatus("Not applicable", true, true), "Needs review");
+  assert.equal(resolveQaStatus("Needs review", true, true, "Pass"), "Pass");
+  assert.equal(resolveQaStatus("Needs review", true, true, "Fail"), "Fail");
+});
+
+test("model rows are paired despite harmless criterion naming changes", () => {
+  const rows = [
+    { qualifier: "Recorded-line confirmed", status: "Pass" },
+    { criterion: "Customer address confirmed", status: "Pass" },
+  ];
+  const paired = pairModelRows(rows, ["Recorded line confirmed", "Address confirmed"]);
+  assert.equal(paired[0], rows[0]);
+  assert.equal(paired[1], rows[1]);
 });

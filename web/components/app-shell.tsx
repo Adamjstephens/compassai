@@ -44,7 +44,7 @@ import {
   type MissedOpportunityAnalysis,
   type MissedOpportunityModelPayload,
 } from "@/lib/missed-opportunities";
-import { resolveQaStatus, sanitizeScorecardLibrary, timestampSeconds, transcriptEvidenceExcerpt, validTimestampForDuration } from "@/lib/qa-safety";
+import { pairModelRows, resolveQaStatus, sanitizeScorecardLibrary, timestampSeconds, transcriptEvidenceExcerpt, validTimestampForDuration } from "@/lib/qa-safety";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -157,7 +157,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.1.2";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -623,13 +623,16 @@ function evidenceIsTranscriptBacked(transcript: string, evidence: string) {
 }
 
 export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], transcript: string, duration = 0) {
-  const modelByCheck = new Map(rows.map((row) => [ruleKey(row.check), row]));
-  return ruleRows.map((fallback) => {
-    const row = modelByCheck.get(ruleKey(fallback.check));
-    const evidence = evidenceFromTranscript(transcript, row?.result || fallback.result || "", fallback, duration);
-    const category = fallback.category || row?.category || "Qualifier";
+  const pairedRows = pairModelRows(rows as unknown as Record<string, unknown>[], ruleRows.map((row) => row.check));
+  return ruleRows.map((fallback, index) => {
+    const raw = pairedRows[index];
+    const row = raw as unknown as AnalysisRow | undefined;
+    const proposedEvidence = String(row?.result || raw?.evidence || raw?.quote || fallback.result || "");
+    const requestedStatus = String(row?.status || raw?.verdict || raw?.grade || fallback.status || "");
+    const evidence = evidenceFromTranscript(transcript, proposedEvidence, fallback, duration);
+    const category = fallback.category || row?.category || String(raw?.category || "Qualifier");
     const critical = isCriticalCategory(category);
-    const status = resolveQaStatus(row?.status || fallback.status, critical, evidence.verifiedForPass);
+    const status = resolveQaStatus(requestedStatus, critical, evidence.verifiedForPass, fallback.status);
     return {
       category,
       check: fallback.check.replace(/^Critical:\s*/i, ""),
@@ -918,7 +921,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a strict QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Return every configured scorecard criterion exactly once; never omit a criterion. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include an exact short evidence snippet and concise explanation. This transcript has no real timing metadata, so transfer.time and every evidence_time must be an empty string; never estimate or invent a timestamp. For Critical criteria, Not applicable is forbidden: use Pass when an exact supporting transcript quote clearly satisfies the criterion, Fail when the failure is supported, and Needs review only when evidence is missing or ambiguous. An evidence-backed Critical Pass must remain Pass. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Never award a critical Pass without transcript evidence. Do not include full transcripts.",
+            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Copy every configured criterion name exactly and return every criterion once in the same order; never rename, combine, or omit criteria. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include an exact short evidence snippet and concise explanation. This transcript has no real timing metadata, so transfer.time and every evidence_time must be an empty string; never estimate or invent a timestamp. Grade Pass when a verbatim transcript quote satisfies the criterion and Fail when transcript evidence demonstrates the criterion was not satisfied. Do not use Needs review as a cautious default. Use Needs review only when the relevant transcript evidence is genuinely missing, contradictory, or too ambiguous to decide. If result contains a clear supporting quote, status must ordinarily be Pass or Fail, not Needs review. For Critical criteria, Not applicable is forbidden. Never award a critical Pass without transcript evidence. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
         },
         {
           role: "user",
@@ -993,13 +996,7 @@ function clientForScorecard(transcript: string, entry: ScorecardEntry) {
 
 function makeRuleAnalysisForScorecard(transcript: string, entry: ScorecardEntry, duration = 0, forcedClient?: string) {
   const client = forcedClient || clientForScorecard(transcript, entry);
-  const rows = rulesFor(entry, client).map((rule) => {
-    const row = gradeRule(rule, transcript, duration);
-    if (isCriticalCategory(row.category) && row.status === "Pass") {
-      return { ...row, status: "Needs review", passed: false };
-    }
-    return row;
-  });
+  const rows = rulesFor(entry, client).map((rule) => gradeRule(rule, transcript, duration));
   return { entry, client, rows };
 }
 
