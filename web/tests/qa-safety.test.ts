@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { compactLlmRubric, isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
+import { compactLlmRubric, isPhoneConfirmationCriterion, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration, verifiedEvidenceOrFallback } from "../lib/qa-safety.ts";
 
 test("scorecard cleanup removes prohibited, duplicate, and same-day instructions", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ bundle: {
@@ -28,6 +28,15 @@ test("clear transcript evidence is recovered from an explanatory model response"
   assert.equal(transcriptEvidenceExcerpt(transcript, "The agent disclosed a monitored line."), "");
 });
 
+test("an unverified model paraphrase is never displayed as evidence", () => {
+  const transcript = "Customer: It is a ranch home.";
+  const paraphrase = "Customer confirms that it is a single-family.";
+  const verified = transcriptEvidenceExcerpt(transcript, paraphrase);
+  assert.equal(verified, "");
+  assert.equal(verifiedEvidenceOrFallback(verified), NO_VERIFIED_EVIDENCE);
+  assert.equal(verifiedEvidenceOrFallback("", "Customer: It is a ranch home."), "Customer: It is a ranch home.");
+});
+
 test("timestamps outside the call duration are rejected", () => {
   assert.equal(validTimestampForDuration("09:58", 600), true);
   assert.equal(validTimestampForDuration("30:00", 600), false);
@@ -40,6 +49,13 @@ test("an evidence-backed critical Pass is guaranteed to remain Pass", () => {
   assert.equal(resolveQaStatus("Not applicable", true, true), "Needs review");
   assert.equal(resolveQaStatus("Needs review", true, true, "Pass"), "Pass");
   assert.equal(resolveQaStatus("Needs review", true, true, "Fail"), "Fail");
+});
+
+test("rule match is authoritative when model status contradicts its evidence", () => {
+  assert.equal(resolveModelQaStatus("pass", "Needs review", false, true, "Needs review"), "Pass");
+  assert.equal(resolveModelQaStatus("fail", "Pass", true, true, "Pass"), "Fail");
+  assert.equal(resolveModelQaStatus("none", "Pass", false, true, "Pass"), "Needs review");
+  assert.equal(resolveModelQaStatus("pass", "Pass", true, false), "Needs review");
 });
 
 test("model rows are paired despite harmless criterion naming changes", () => {
@@ -125,5 +141,16 @@ test("every bundled LLM criterion has concise pass and fail instructions", () =>
       assert.ok(rule.pass_description?.trim(), `${scorecard.name}: ${rule.name} needs a pass instruction`);
       assert.ok(rule.fail_description?.trim(), `${scorecard.name}: ${rule.name} needs a fail instruction`);
     }
+  }
+});
+
+test("the same evidence-status reconciliation applies to every bundled client", () => {
+  const library = JSON.parse(readFileSync(new URL("../../shared/qa_scorecards.json", import.meta.url), "utf8"));
+  for (const scorecard of library.scorecards) {
+    assert.equal(
+      resolveModelQaStatus("pass", "Needs review", false, true, "Needs review"),
+      "Pass",
+      `${scorecard.name} did not use central reconciliation`,
+    );
   }
 });

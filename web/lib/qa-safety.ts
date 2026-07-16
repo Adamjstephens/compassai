@@ -19,6 +19,12 @@ type LibraryLike = {
   [key: string]: unknown;
 };
 
+export const NO_VERIFIED_EVIDENCE = "No verified transcript evidence found.";
+
+export function verifiedEvidenceOrFallback(verifiedEvidence = "", fallbackEvidence = "") {
+  return verifiedEvidence.trim() || fallbackEvidence.trim() || NO_VERIFIED_EVIDENCE;
+}
+
 const REMOVED_CRITERIA = new Set(["no same day", "booked correct calendar", "new qualifier"]);
 
 export const APPOINTMENT_LENGTH_RULE: RuleLike = {
@@ -276,6 +282,22 @@ export function resolveQaStatus(requestedStatus: string, critical: boolean, evid
   if (critical && status === "Not applicable") return "Needs review";
   if (status === "Pass" && !evidenceVerified) return "Needs review";
   return status;
+}
+
+export function resolveModelQaStatus(
+  ruleMatch: string,
+  requestedStatus: string,
+  critical: boolean,
+  evidenceVerified: boolean,
+  fallbackStatus = "",
+) {
+  const match = ruleMatch.trim().toLowerCase();
+  if (match === "pass") return resolveQaStatus("Pass", critical, evidenceVerified);
+  if (match === "fail") return resolveQaStatus("Fail", critical, evidenceVerified);
+  if (match === "none" || match === "ambiguous") {
+    return resolveQaStatus("Needs review", critical, evidenceVerified);
+  }
+  return resolveQaStatus(requestedStatus, critical, evidenceVerified, fallbackStatus);
 }
 
 function qaRowKey(row: Record<string, unknown>) {

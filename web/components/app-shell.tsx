@@ -45,7 +45,7 @@ import {
   type MissedOpportunityModelPayload,
 } from "@/lib/missed-opportunities";
 import { splitDuplicateFiles } from "@/lib/file-dedup";
-import { compactLlmRubric, isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt } from "@/lib/qa-safety";
+import { compactLlmRubric, isPhoneConfirmationCriterion, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, verifiedEvidenceOrFallback } from "@/lib/qa-safety";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -98,6 +98,7 @@ type AnalysisRow = {
   passed: boolean;
   result: string;
   evidence_time: string;
+  rule_match?: string;
 };
 type TransferAnalysis = {
   occurred: boolean;
@@ -158,7 +159,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -557,14 +558,14 @@ function timeForSnippet(text: string, snippet: string, duration = 0) {
 function evidenceFromTranscript(transcript: string, proposed: string, fallback: AnalysisRow | undefined, duration = 0) {
   const clean = proposed.replace(/\s+/g, " ").trim();
   const excerpt = transcriptEvidenceExcerpt(transcript, clean);
-  if (excerpt) {
-    const result = snippetFor(transcript, excerpt);
-    return { result, evidence_time: "", verifiedForPass: true, source: "model" as const };
+  const verified = excerpt ? snippetFor(transcript, excerpt) : "";
+  const fallbackEvidence = fallback?.result && !/^No clear evidence/i.test(fallback.result) ? fallback.result : "";
+  const result = verifiedEvidenceOrFallback(verified, fallbackEvidence);
+  if (verified) return { result, evidence_time: "", verifiedForPass: true, source: "model" as const };
+  if (fallbackEvidence) {
+    return { result, evidence_time: fallback?.evidence_time || "", verifiedForPass: fallback?.status === "Pass", source: "scanner" as const };
   }
-  if (fallback?.result && !/^No clear evidence/i.test(fallback.result)) {
-    return { result: fallback.result, evidence_time: fallback.evidence_time, verifiedForPass: fallback.status === "Pass", source: "scanner" as const };
-  }
-  return { result: clean || fallback?.result || "No clear evidence found in transcript.", evidence_time: fallback?.evidence_time || "", verifiedForPass: false, source: "unverified" as const };
+  return { result: NO_VERIFIED_EVIDENCE, evidence_time: "", verifiedForPass: false, source: "unverified" as const };
 }
 
 function ruleKey(value = "") {
@@ -596,10 +597,14 @@ export function normalizeQaRows(rows: AnalysisRow[], ruleRows: AnalysisRow[], tr
     const row = raw as unknown as AnalysisRow | undefined;
     const proposedEvidence = String(row?.result || raw?.evidence || raw?.quote || fallback.result || "");
     const requestedStatus = String(row?.status || raw?.verdict || raw?.grade || fallback.status || "");
+    const ruleMatch = String(row?.rule_match || raw?.rule_match || raw?.matched_rule || "");
     let evidence = evidenceFromTranscript(transcript, proposedEvidence, fallback, duration);
     const category = fallback.category || row?.category || String(raw?.category || "Qualifier");
     const critical = isCriticalCategory(category);
-    let status = resolveQaStatus(requestedStatus, critical, evidence.verifiedForPass, fallback.status);
+    let status = resolveModelQaStatus(ruleMatch, requestedStatus, critical, evidence.verifiedForPass, fallback.status);
+    if (status === "Fail" && evidence.source === "unverified" && ruleMatch.trim().toLowerCase() === "fail") {
+      evidence = { ...evidence, result: "Required supporting statement was not found in the transcript." };
+    }
     if (isPhoneConfirmationCriterion(fallback.check)) {
       const phone = phoneConfirmationExcerpt(transcript);
       evidence = phone.evidence
@@ -895,7 +900,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: s
         {
           role: "system",
           content:
-            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. Use an exact transcript quote as result evidence. For an absence-based Fail, result may state that no supporting statement was found. Pass when the quote satisfies the pass rule; Fail when the transcript satisfies the fail rule. Use Needs review only for genuinely contradictory or ambiguous evidence, never as a cautious default. Critical criteria cannot be Not applicable or Pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
+            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,rule_match,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. rule_match must be pass when an exact quote satisfies the pass rule, fail when an exact quote or the documented absence satisfies the fail rule, and none only when neither rule can be decided. Do not return a separate status; the app derives it from rule_match. Copy an exact transcript quote into result without paraphrasing. For an absence-based fail, result must be 'No supporting statement found.' Critical criteria cannot be pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
         },
         {
           role: "user",
@@ -2618,7 +2623,7 @@ function ReviewPanel({
             <div className="pane-heading"><div><h4>QA checks</h4><p>{rows.length} qualifier{rows.length === 1 ? "" : "s"}</p></div></div>
             <div className="qa-table-wrap">
               <table>
-                <thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Evidence</th><th>Reviewer note</th></tr></thead>
+                <thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Verified evidence</th><th>Reviewer note</th></tr></thead>
                 <tbody>{rows.map((row, index) => (
                   <tr key={`${row.Qualifier}-${index}`}>
                     <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
