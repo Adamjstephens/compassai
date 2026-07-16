@@ -16,6 +16,7 @@
             "patterns": [
               "\\bQWD\\b",
               "\\bRbA\\b",
+              "\\bRenewal\\s+by\\s+andersen\\b",
               "\\bRenewal\\s+by\\s+anderson\\b"
             ]
           }
@@ -50,27 +51,25 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
             "type": null,
             "positive_patterns": [
-              "\\bhomeowner\\b",
-              "\\bhome\\s+owner\\b",
-              "\\bown\\s+(?:the|your|this|my)\\s+home\\b",
-              "\\bowner\\s+of\\s+(?:the|this)\\s+(?:home|property|house)\\b",
-              "\\bproperty\\s+owner\\b",
-              "\\bdo\\s+you\\s+own\\b",
-              "\\bare\\s+you\\s+the\\s+owner\\b",
-              "\\bmy\\s+home\\b",
-              "\\bmy\\s+house\\b"
+              "\\b(?:are\\s+you\\s+the\\s+(?:homeowner|home\\s+owner|owner)|do\\s+you\\s+own).{0,100}\\b(?:yes|yeah|yep|correct|right|i\\s+am|we\\s+are|i\\s+do|we\\s+do)\\b",
+              "\\b(?:i\\s+am|we\\s+are|i'm|we're)\\s+(?:the\\s+)?(?:homeowner|home\\s+owner|owner)\\b",
+              "\\b(?:i|we)\\s+own\\s+(?:the|this|my|our)\\s+(?:home|house|property)\\b"
             ],
             "negative_patterns": [
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -89,7 +88,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -125,40 +126,35 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "All decision makers present",
                 "type": null,
                 "positive_patterns": [
-                  "\\b(?:decision\\s+maker|spouse|husband|wife|partner|significant\\s+other)\\b",
-                  "\\b(?:anyone\\s+else|anybody\\s+else)\\b.{0,80}(?:present|there|home|attend)"
+                  "\\b(?:spouse|husband|wife|partner|significant\\s+other|decision\\s+maker).{0,100}\\b(?:will|can|going\\s+to)\\b.{0,40}\\b(?:attend|be\\s+there|present|home)\\b",
+                  "\\b(?:only|sole)\\s+(?:decision\\s+maker|owner|homeowner)\\b",
+                  "\\b(?:anyone|anybody)\\s+else.{0,80}\\b(?:no|just\\s+me|only\\s+me|nobody)\\b"
                 ],
                 "negative_patterns": [
                   "\\bQuestion\\s+about\\s+decision\\s+makers\\s+not\\s+asked\\s+or\\s+other\\s+decision\\s+makers\\s+exist\\s+but\\s+will\\s+not\\s+be\\s+present\\b"
                 ],
-                "pass_description": "All decision makers like spouses, long term partners, or domestic partners are confirmed to be present if applicable",
-                "fail_description": "Question about decision makers not asked or other decision makers exist but will not be present"
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed."
               },
               {
                 "name": "Address Confirmed",
                 "type": null,
                 "positive_patterns": [
                   "\\b\\d{1,6}[\\s\\-]?(?:[A-Za-z0-9\\.\\-]+\\s+){0,4}?(?:street|st|road|rd|drive|dr|lane|ln|avenue|ave|av|boulevard|blvd|circle|cir|court|ct|place|pl|way|terrace|ter|trail|trl|highway|hwy|parkway|pkwy|crescent|cres|row|run|pass|path|loop|bend|ridge|crossing|xing|square|sq|plaza|point|pt|heights|hts|valley|vw|view|trace)\\b(?:\\s+(?:apt|apartment|suite|ste|unit|#)\\s*[A-Za-z0-9\\-]+)?",
-                  "\\b\\d{3}[-.\\s]\\d{3}[-.\\s]\\d{4}\\b",
-                  "\\bphone\\s+(?:number|confirmed|is|correct|good)\\b",
-                  "\\b(?:best|primary|main|cell|cellphone|cell\\s+phone)\\s+number\\b",
-                  "\\bemail\\b",
-                  "\\be[-\\s]?mail\\s+address\\b",
-                  "[\\w.+-]+@[\\w-]+\\.[\\w.-]+",
-                  "\\bCustomer\\s+confirms\\s+their\\s+address\\b"
+                  "\\b(?:address|street\\s+address).{0,80}\\b(?:correct|confirmed|right|yes|yeah|yep)\\b"
                 ],
                 "negative_patterns": [
                   "\\bno\\s+questions\\s+in\\s+regard\\s+to\\s+address\\s+and\\s+it's\\s+accuracy\\s+asked\\b"
                 ],
-                "pass_description": "Customer confirms their address",
-                "fail_description": "no questions in regard to address and it's accuracy asked"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Number Confirmed",
@@ -174,16 +170,15 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Government Grant Disclosure",
                 "type": null,
                 "positive_patterns": [
-                  "\\bgovernment\\s+(?:assistance|grant|program|aid|fund)\\b",
-                  "\\bfree\\s+windows?\\b",
-                  "\\bdoesn'?t\\s+(?:participate|do|cover|offer)\\s+government\\b"
+                  "\\b(?:government\\s+(?:assistance|grant|program|aid|fund)|free\\s+windows?).{0,240}\\b(?:yes|yeah|yep|okay|ok|understand|correct|right)\\b",
+                  "\\bdoesn'?t\\s+(?:participate|do|cover|offer)\\s+government.{0,200}\\b(?:yes|yeah|yep|okay|ok|understand|correct|right)\\b"
                 ],
                 "negative_patterns": [
                   "\\bcustomer\\s+wants\\s+free\\s+windows\\s+and\\s+does\\s+not\\s+understand\\s+that\\s+we\\s+do\\s+not\\s+give\\s+free\\s+windows\\b"
@@ -197,14 +192,12 @@
                 "positive_patterns": [
                   "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex)\\b",
                   "\\b(?:one|two)\\s+stor(?:y|ey)\\b",
-                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b",
-                  "\\b(?:shed|trailer|RV)\\b",
-                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
-                  "\\bglass\\s+(?:repair|replacement)\\b",
-                  "\\bdoor\\s+(?:repair|replacement)\\b"
+                  "\\b(?:ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
                 ],
                 "negative_patterns": [
-                  "\\bA\\s+glass\\s+repair\\s+or\\s+door\\s+repair\\s+project,\\s+involving\\s+a\\s+shed,\\s+or\\s+a\\s+project\\s+only\\s+involving\\s+screen\\s+doors,\\s+egress\\s+windows,\\s+storm\\s+windows\\s+without\\s+full\\s+window\\s+replacement\\b"
+                  "\\b(?:shed|trailer|RV)\\b",
+                  "\\b(?:screen\\s+door|egress\\s+window|storm\\s+window)\\b",
+                  "\\b(?:glass|door)\\s+(?:repair|replacement)\\b"
                 ],
                 "pass_description": "Not a glass repair or door repair project, not involving a shed, not a project only involving screen doors, no egress windows, and no storm windows without full window replacement",
                 "fail_description": "A glass repair or door repair project, involving a shed, or a project only involving screen doors, egress windows, storm windows without full window replacement"
@@ -303,7 +296,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -323,7 +318,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -342,7 +339,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -412,8 +411,8 @@
                   "\\b(?:1|2|one|two)\\s*(?:windows?|doors?)\\b",
                   "\\b(?:just|only)\\s+(?:1|2|one|two)\\s*(?:windows?|doors?)\\b"
                 ],
-                "pass_description": "ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS. Count windows and doors together when the customer gives a combined project, so two windows plus one door is three and passes. Accept numeric or spoken counts. Whole-house, all-window, several-window, several-door, or multiple-unit projects also pass.",
-                "fail_description": "FAIL when the total project is fewer than 3 windows and doors. One or two total units do not pass. If no reliable project count can be established, mark Needs review rather than inventing a count.",
+                "pass_description": "Any window count of 3 or greater is a Pass.",
+                "fail_description": "Any window count less than 3 is a Fail.",
                 "mishear_description": "tree windows -> three windows; too windows -> two windows"
               },
               {
@@ -467,8 +466,9 @@
                   "[\\w.+-]+@[\\w-]+\\.[\\w.-]+"
                 ],
                 "negative_patterns": [],
-                "pass_description": "email is correct; that is my email; yes that is correct; confirmed email; spell my email; email address is",
-                "mishear_description": "e male -> email;gmail dot com -> gmail.com"
+                "pass_description": "Customer confirms or provides an email address.",
+                "mishear_description": "e male -> email;gmail dot com -> gmail.com",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Phone Confirmed",
@@ -484,8 +484,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Appointment Length",
@@ -498,8 +498,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               }
             ]
           }
@@ -645,7 +645,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -665,7 +667,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -684,7 +688,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -710,8 +716,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Email",
@@ -730,8 +736,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email"
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Phone",
@@ -747,8 +753,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Decision Makers",
@@ -762,8 +768,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed."
               },
               {
                 "name": "Roof Age Or Damage",
@@ -877,8 +883,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "Approved Time Slot",
@@ -1001,7 +1007,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -1021,7 +1029,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -1040,7 +1050,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -1066,8 +1078,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Email",
@@ -1086,8 +1098,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email"
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Phone",
@@ -1103,8 +1115,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Decision Makers",
@@ -1118,8 +1130,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed."
               },
               {
                 "name": "Roof Age Or Damage",
@@ -1232,8 +1244,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "Approved Time Slot",
@@ -1354,7 +1366,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -1374,7 +1388,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -1393,7 +1409,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -1419,8 +1437,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there",
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1440,8 +1458,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email",
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1458,8 +1476,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed.",
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1474,8 +1492,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "decision maker will be there; all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there",
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               },
               {
@@ -1570,8 +1588,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass.",
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted.",
                 "mishear_description": "JP Carrol -> JP Carroll"
               }
             ]
@@ -1720,7 +1738,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -1740,7 +1760,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -1759,7 +1781,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -1785,8 +1809,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Email",
@@ -1805,8 +1829,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email"
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Phone",
@@ -1822,8 +1846,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Decision Makers",
@@ -1837,8 +1861,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed."
               },
               {
                 "name": "Roof Age Or Damage",
@@ -1953,8 +1977,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "Approved Time Slot",
@@ -2083,7 +2107,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -2103,7 +2129,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -2122,7 +2150,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -2148,8 +2178,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Email",
@@ -2168,8 +2198,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email"
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Phone",
@@ -2185,8 +2215,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Decision Makers",
@@ -2200,8 +2230,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there"
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed."
               },
               {
                 "name": "Roof Age Or Wear",
@@ -2309,8 +2339,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "Approved Time Slot",
@@ -2429,7 +2459,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -2449,7 +2481,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -2468,7 +2502,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           }
         ],
         "client_rule_sets": {
@@ -2494,8 +2530,8 @@
                   "\\bthat\\s+is\\s+not\\s+my\\s+address\\b",
                   "\\bI\\s+do\\s+not\\s+live\\s+there\\b"
                 ],
-                "pass_description": "address confirmed; confirmed address; yes that is my address; that is the correct address; I live at; property address is",
-                "fail_description": "wrong address; that is not my address; I do not live there"
+                "pass_description": "Customer confirms the service address.",
+                "fail_description": "The address is not confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Email",
@@ -2514,8 +2550,8 @@
                   "\\bI\\s+do\\s+not\\s+have\\s+email\\b",
                   "\\bno\\s+email\\b"
                 ],
-                "pass_description": "email confirmed; confirmed email; yes that is my email; best email is; send it to my email; email address is",
-                "fail_description": "wrong email; I do not have email; no email"
+                "pass_description": "Customer confirms or provides an email address.",
+                "fail_description": "No email is confirmed or the customer says it is wrong."
               },
               {
                 "name": "Confirmed Phone",
@@ -2531,8 +2567,8 @@
                   "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
                   "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
                 ],
-                "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-                "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+                "pass_description": "Customer confirms or provides a phone or callback number.",
+                "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
               },
               {
                 "name": "Exterior Material",
@@ -2547,7 +2583,8 @@
                   "\\boutside\\s+is\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "vinyl siding; brick exterior; wood exterior; aluminum siding; stucco; exterior is; outside is"
+                "pass_description": "vinyl siding; brick exterior; wood exterior; aluminum siding; stucco; exterior is; outside is",
+                "fail_description": "The exterior material is not confirmed."
               },
               {
                 "name": "Garage Type",
@@ -2559,7 +2596,8 @@
                   "\\b(?:single[-\\s]?family|town\\s?home|townhouse|condo|condominium|mobile\\s+home|manufactured\\s+home|modular\\s+home|duplex|apartment|ranch|colonial|split[-\\s]?level|bi[-\\s]?level)\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "attached garage; detached garage; garage is attached; garage is detached; no garage"
+                "pass_description": "attached garage; detached garage; garage is attached; garage is detached; no garage",
+                "fail_description": "The garage type is not confirmed."
               },
               {
                 "name": "Window Count",
@@ -2573,7 +2611,8 @@
                   "\\bno\\s+minimum\\s+window\\s+requirement\\b"
                 ],
                 "negative_patterns": [],
-                "pass_description": "one window; two windows; three windows; how many windows; replace all windows; no minimum window requirement"
+                "pass_description": "one window; two windows; three windows; how many windows; replace all windows; no minimum window requirement",
+                "fail_description": "The window count is not confirmed."
               },
               {
                 "name": "Decision Makers",
@@ -2587,8 +2626,8 @@
                   "\\bspouse\\s+will\\s+not\\s+be\\s+there\\b",
                   "\\bowner\\s+will\\s+not\\s+be\\s+there\\b"
                 ],
-                "pass_description": "all decision makers; spouse will be there; husband will be there; wife will be there; both of us will be present; everyone will be there; Refused",
-                "fail_description": "decision maker cannot attend; spouse will not be there; owner will not be there",
+                "pass_description": "All required decision makers will attend.",
+                "fail_description": "A required decision maker will not attend or attendance is not confirmed.",
                 "mishear_description": "refuse -> Refused"
               },
               {
@@ -2603,8 +2642,8 @@
                   "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
                   "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
                 ],
-                "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-                "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+                "pass_description": "Customer accepts a 60-90 minute appointment.",
+                "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
               },
               {
                 "name": "Vinyl Disclaimer",
@@ -2649,7 +2688,8 @@
                   "\\btenant\\b"
                 ],
                 "fail_description": "roofing; siding; storm door; storm doors; storm windows only; storm window; storm windows; repair only; glass only; single wide mobile home; renting; renter; tenant",
-                "mishear_description": "single-wide -> single wide;store door -> storm door;double-wide -> double wide;store window -> storm window"
+                "mishear_description": "single-wide -> single wide;store door -> storm door;double-wide -> double wide;store window -> storm window",
+                "pass_description": "Project is for replacement windows or approved replacement doors."
               },
               {
                 "name": "Approved Time Slot",
@@ -2852,7 +2892,9 @@
               "\\btype\\s+of\\s+home\\b",
               "\\bkind\\s+of\\s+home\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Customer confirms the type of home.",
+            "fail_description": "The home type is not confirmed."
           },
           {
             "name": "Homeowner confirmed",
@@ -2872,7 +2914,9 @@
               "\\brent(?:er|ing)?\\b",
               "\\blandlord\\b",
               "\\bnot\\s+the\\s+(?:homeowner|owner)\\b"
-            ]
+            ],
+            "pass_description": "Customer confirms they own the property.",
+            "fail_description": "Customer rents, is not the owner, or ownership is not confirmed."
           },
           {
             "name": "Recorded line confirmed",
@@ -2891,7 +2935,9 @@
               "\\bquality\\s+(?:assurance|training).{0,60}\\brecord(?:ed|ing)?\\b",
               "\\brecord(?:ed|ing)\\s+for\\s+(?:quality|training)\\b"
             ],
-            "negative_patterns": []
+            "negative_patterns": [],
+            "pass_description": "Agent states that the call or line is recorded.",
+            "fail_description": "The recorded-line disclosure is not stated."
           },
           {
             "name": "Appointment Length",
@@ -2904,8 +2950,8 @@
               "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
               "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b"
             ],
-            "pass_description": "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-            "fail_description": "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass."
+            "pass_description": "Customer accepts a 60-90 minute appointment.",
+            "fail_description": "The 60-90 minute length is missing, rejected, or contradicted."
           },
           {
             "name": "Phone Number Confirmed",
@@ -2920,8 +2966,8 @@
               "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
               "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b"
             ],
-            "pass_description": "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-            "fail_description": "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed."
+            "pass_description": "Customer confirms or provides a phone or callback number.",
+            "fail_description": "No phone or callback number is confirmed, or the customer says it is wrong."
           }
         ],
         "client_rule_sets": {},

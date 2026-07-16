@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
+import { compactLlmRubric, isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, validTimestampForDuration } from "../lib/qa-safety.ts";
 
 test("scorecard cleanup removes prohibited, duplicate, and same-day instructions", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ bundle: {
@@ -83,17 +84,46 @@ test("every scorecard receives appointment length and phone confirmation rules",
   }
 });
 
-test("Pella project size passes any window or door count of three or greater", () => {
+test("Pella project size uses concise LLM instructions while retaining fallback patterns", () => {
   const library = sanitizeScorecardLibrary({ scorecards: [{ name: "Pella", bundle: {
     universal_rules: [],
-    client_rule_sets: { pella: { rules: [{ name: "Project Size", positive_patterns: ["3 windows"], pass_description: "" }] } },
+    client_rule_sets: { pella: { rules: [{ name: "Project Size", positive_patterns: ["3 windows"], pass_description: "", fail_description: "" }] } },
     critical_checks: ["Project Size"],
   } }] });
   const projectSize = library.scorecards?.[0]?.bundle?.client_rule_sets?.pella.rules?.find((rule) => rule.name === "Project Size");
-  assert.match(projectSize?.pass_description ?? "", /ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS/);
+  assert.equal(projectSize?.pass_description, "Any window count of 3 or greater is a Pass.");
+  assert.equal(projectSize?.fail_description, "Any window count less than 3 is a Fail.");
   const patterns = (projectSize?.positive_patterns ?? []).map((pattern) => new RegExp(pattern, "i"));
   assert.equal(patterns.some((pattern) => pattern.test("The customer needs 3 doors")), true);
   assert.equal(patterns.some((pattern) => pattern.test("They want 27 windows")), true);
   assert.equal(patterns.some((pattern) => pattern.test("We need seven doors")), true);
   assert.equal(patterns.some((pattern) => pattern.test("They need 2 windows")), false);
+});
+
+test("cloud rubric is concise, semantic, and excludes scanner patterns", () => {
+  const rubric = compactLlmRubric("Pella", "Pella Windows & Doors", [
+    { name: "Recorded line confirmed", type: "Critical", positive_patterns: ["a very large regex"], negative_patterns: ["another regex"] },
+    { name: "Project Size", type: "Critical", pass_description: "Any window count of 3 or greater is a Pass.", fail_description: "Any window count less than 3 is a Fail.", positive_patterns: ["\\b[3-9] windows\\b"] },
+  ]);
+  assert.deepEqual(rubric.criteria, [
+    { name: "Recorded line confirmed", critical: true, pass: "Agent states that the call or line is recorded.", fail: "The recorded-line disclosure is not stated." },
+    { name: "Project Size", critical: true, pass: "Any window count of 3 or greater is a Pass.", fail: "Any window count less than 3 is a Fail." },
+  ]);
+  const serialized = JSON.stringify(rubric);
+  assert.doesNotMatch(serialized, /positive_patterns|negative_patterns|regex/);
+});
+
+test("every bundled LLM criterion has concise pass and fail instructions", () => {
+  const library = JSON.parse(readFileSync(new URL("../../shared/qa_scorecards.json", import.meta.url), "utf8"));
+  for (const scorecard of library.scorecards) {
+    const bundle = scorecard.bundle ?? {};
+    const rules = [
+      ...(bundle.universal_rules ?? []),
+      ...Object.values(bundle.client_rule_sets ?? {}).flatMap((set: any) => set.rules ?? []),
+    ].filter((rule: any) => rule.name !== "Client identified");
+    for (const rule of rules) {
+      assert.ok(rule.pass_description?.trim(), `${scorecard.name}: ${rule.name} needs a pass instruction`);
+      assert.ok(rule.fail_description?.trim(), `${scorecard.name}: ${rule.name} needs a fail instruction`);
+    }
+  }
 });

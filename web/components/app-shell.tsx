@@ -45,7 +45,7 @@ import {
   type MissedOpportunityModelPayload,
 } from "@/lib/missed-opportunities";
 import { splitDuplicateFiles } from "@/lib/file-dedup";
-import { isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt } from "@/lib/qa-safety";
+import { compactLlmRubric, isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt } from "@/lib/qa-safety";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -158,7 +158,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.1.5";
+const APP_VERSION = "1.2.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -883,7 +883,8 @@ async function transcribeDirect(file: File, apiKey: string, requestedModel: stri
   }
 }
 
-async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: string, model: string) {
+async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: string, apiKey: string, model: string) {
+  const rubric = compactLlmRubric(scorecard.name, client, rulesFor(scorecard, client));
   const response = await fetch("/api/openai/chat", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -894,13 +895,12 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, apiKey: s
         {
           role: "system",
           content:
-            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. Copy every configured criterion name exactly and return every criterion once in the same order; never rename, combine, or omit criteria. Identify agent/customer from transcript context when clear, such as greetings and introductions. Detect warm or cold transfers, handoffs, 'let me get you over to' language, hold-then-transfer moments, or a clear change in agent/customer roles. transfer.occurred must be true only when the transcript supports a transfer; include an exact short evidence snippet and concise explanation. This transcript has no real timing metadata, so transfer.time and every evidence_time must be an empty string; never estimate or invent a timestamp. Grade Pass when a verbatim transcript quote satisfies the criterion and Fail when transcript evidence demonstrates the criterion was not satisfied. Do not use Needs review as a cautious default. Use Needs review only when the relevant transcript evidence is genuinely missing, contradictory, or too ambiguous to decide. If result contains a clear supporting quote, status must ordinarily be Pass or Fail, not Needs review. For phone confirmation, only an explicitly confirmed phone or callback number is valid evidence; addresses, emails, ZIP codes, credit scores, appointment times, and unrelated numbers are invalid. For Critical criteria, Not applicable is forbidden. Never award a critical Pass without transcript evidence. For non-critical criteria, status must be Pass, Fail, Needs review, or Not applicable. Do not include full transcripts.",
+            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,status,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. Use an exact transcript quote as result evidence. For an absence-based Fail, result may state that no supporting statement was found. Pass when the quote satisfies the pass rule; Fail when the transcript satisfies the fail rule. Use Needs review only for genuinely contradictory or ambiguous evidence, never as a cautious default. Critical criteria cannot be Not applicable or Pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
         },
         {
           role: "user",
           content: JSON.stringify({
-            scorecard_name: scorecard.name,
-            scorecard_bundle: scorecard.bundle,
+            rubric,
             transcript: transcript.slice(0, 45000),
           }),
         },
@@ -1453,7 +1453,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               progress: (index + 0.65) / selectedFiles.length,
               percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
             });
-            const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, cleanApiKey(openaiApiKey), qaModel);
+            const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, cleanApiKey(openaiApiKey), qaModel);
             qaIdentity = {
               agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
               customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
@@ -1546,7 +1546,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const started = Date.now();
     try {
       const ruleAnalysis = makeRuleAnalysisForScorecard(target.transcript_text, scorecard, target.duration_seconds ?? 0);
-      const qa = await qaDirect(target.transcript_text, scorecard, key, qaModel);
+      const qa = await qaDirect(target.transcript_text, scorecard, ruleAnalysis.client, key, qaModel);
       if (!Array.isArray(qa.rows) || !qa.rows.length) throw new Error("The cloud QA model returned no scorecard rows.");
       const rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, target.transcript_text, target.duration_seconds ?? 0);
       const localIdentity = transcriptIdentity(target.transcript_text);

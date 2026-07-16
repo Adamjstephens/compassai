@@ -32,8 +32,8 @@ export const APPOINTMENT_LENGTH_RULE: RuleLike = {
     "\\b(?:only|just)\\s+(?:have|got).{0,20}\\b(?:10|15|20|30|45)\\s*(?:minutes|minute|mins|min)\\b",
     "\\b(?:60|90)\\s*(?:minutes|minute|mins|min).{0,30}\\b(?:too\\s+long|won't\\s+work|doesn't\\s+work)\\b",
   ],
-  pass_description: "PASS only when the agent states that the appointment will take 60-90 minutes and the customer acknowledges or accepts that duration. Not applicable is never allowed for this critical criterion.",
-  fail_description: "FAIL when a conflicting duration is given or the customer refuses the required appointment length. If the 60-90 minute duration is missing or ambiguous, mark Needs review rather than Pass.",
+  pass_description: "Customer accepts a 60-90 minute appointment.",
+  fail_description: "The 60-90 minute length is missing, rejected, or contradicted.",
 };
 
 const PHONE_VALUE_PATTERN = String.raw`(?:(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)(?:[\s-]+(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)){9})`;
@@ -51,8 +51,8 @@ export const PHONE_CONFIRMATION_RULE: RuleLike = {
     "\\b(?:not|isn't|is\\s+not)\\s+my\\s+(?:phone\\s+)?number\\b",
     "\\bdo\\s+not\\s+call\\s+(?:this|that)\\s+number\\b",
   ],
-  pass_description: "PASS only when the transcript explicitly confirms the customer's phone or callback number. Valid evidence includes a phone number stated in response to a phone-number question, the customer affirming that a stated number is correct or best, or the customer providing a number where they can be reached. An address, email address, ZIP code, credit score, appointment time, or unrelated number is never phone-confirmation evidence.",
-  fail_description: "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed.",
+  pass_description: "Customer confirms or provides a phone or callback number.",
+  fail_description: "No phone or callback number is confirmed, or the customer says it is wrong.",
 };
 
 export const PELLA_PROJECT_SIZE_RULE: RuleLike = {
@@ -67,9 +67,63 @@ export const PELLA_PROJECT_SIZE_RULE: RuleLike = {
     String.raw`\b(?:1|2|one|two)\s*(?:windows?|doors?)\b`,
     String.raw`\b(?:just|only)\s+(?:1|2|one|two)\s*(?:windows?|doors?)\b`,
   ],
-  pass_description: "ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS. Count windows and doors together when the customer gives a combined project, so two windows plus one door is three and passes. Accept numeric or spoken counts. Whole-house, all-window, several-window, several-door, or multiple-unit projects also pass.",
-  fail_description: "FAIL when the total project is fewer than 3 windows and doors. One or two total units do not pass. If no reliable project count can be established, mark Needs review rather than inventing a count.",
+  pass_description: "Any window count of 3 or greater is a Pass.",
+  fail_description: "Any window count less than 3 is a Fail.",
   mishear_description: "tree windows -> three windows; too windows -> two windows",
+};
+
+const COMMON_LLM_INSTRUCTIONS: Record<string, { pass: string; fail: string }> = {
+  "home type confirmed": {
+    pass: "Customer confirms the type of home.",
+    fail: "The home type is not confirmed.",
+  },
+  "homeowner confirmed": {
+    pass: "Customer confirms they own the property.",
+    fail: "Customer rents, is not the owner, or ownership is not confirmed.",
+  },
+  "recorded line confirmed": {
+    pass: "Agent states that the call or line is recorded.",
+    fail: "The recorded-line disclosure is not stated.",
+  },
+  "confirmed address": {
+    pass: "Customer confirms the service address.",
+    fail: "The address is not confirmed or the customer says it is wrong.",
+  },
+  "address confirmed": {
+    pass: "Customer confirms the service address.",
+    fail: "The address is not confirmed or the customer says it is wrong.",
+  },
+  "confirmed email": {
+    pass: "Customer confirms or provides an email address.",
+    fail: "No email is confirmed or the customer says it is wrong.",
+  },
+  "email confirmed": {
+    pass: "Customer confirms or provides an email address.",
+    fail: "No email is confirmed or the customer says it is wrong.",
+  },
+  "decision makers": {
+    pass: "All required decision makers will attend.",
+    fail: "A required decision maker will not attend or attendance is not confirmed.",
+  },
+  "all decision makers present": {
+    pass: "All required decision makers will attend.",
+    fail: "A required decision maker will not attend or attendance is not confirmed.",
+  },
+};
+
+const MISSING_LLM_INSTRUCTIONS: Record<string, { pass?: string; fail?: string }> = {
+  "exterior material": {
+    fail: "The exterior material is not confirmed.",
+  },
+  "garage type": {
+    fail: "The garage type is not confirmed.",
+  },
+  "window count": {
+    fail: "The window count is not confirmed.",
+  },
+  "approved service": {
+    pass: "Project is for replacement windows or approved replacement doors.",
+  },
 };
 
 function criterionKey(value = "") {
@@ -99,7 +153,41 @@ function cleanRule(rule: RuleLike): RuleLike {
   if ((key.includes("phone") || key.includes("number")) && key.includes("confirm")) {
     return { ...cleaned, ...PHONE_CONFIRMATION_RULE, name: rule.name || PHONE_CONFIRMATION_RULE.name };
   }
+  const common = COMMON_LLM_INSTRUCTIONS[key];
+  if (common) return { ...cleaned, pass_description: common.pass, fail_description: common.fail };
+  const missing = MISSING_LLM_INSTRUCTIONS[key];
+  if (missing) {
+    return {
+      ...cleaned,
+      pass_description: cleaned.pass_description || missing.pass,
+      fail_description: cleaned.fail_description || missing.fail,
+    };
+  }
   return cleaned;
+}
+
+function conciseInstruction(value: unknown, fallback: string) {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return text || fallback;
+}
+
+export function compactLlmRubric(scorecardName: string, client: string, rules: RuleLike[]) {
+  return {
+    scorecard: scorecardName,
+    client,
+    criteria: rules
+      .filter((rule) => criterionKey(rule.name) !== "client identified")
+      .map((original) => {
+        const rule = cleanRule(original);
+        const name = String(rule.name || "Unnamed criterion").replace(/^Critical:\s*/i, "");
+        return {
+          name,
+          critical: String(rule.type || "").toLowerCase() === "critical" || /^Critical:/i.test(String(rule.name || "")),
+          pass: conciseInstruction(rule.pass_description, `${name} is clearly satisfied.`),
+          fail: conciseInstruction(rule.fail_description, `${name} is not satisfied.`),
+        };
+      }),
+  };
 }
 
 function cleanRules(rules: RuleLike[] = [], inherited = new Set<string>()) {
