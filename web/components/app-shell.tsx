@@ -44,6 +44,7 @@ import {
   type MissedOpportunityAnalysis,
   type MissedOpportunityModelPayload,
 } from "@/lib/missed-opportunities";
+import { splitDuplicateFiles } from "@/lib/file-dedup";
 import { isPhoneConfirmationCriterion, pairModelRows, phoneConfirmationExcerpt, resolveQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt } from "@/lib/qa-safety";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
@@ -157,7 +158,7 @@ const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.1.4";
+const APP_VERSION = "1.1.5";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -180,33 +181,6 @@ function escapeHtml(value: unknown) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function fileSignature(name: string, size: number) {
-  return `${name.trim().toLowerCase()}::${size}`;
-}
-
-export function splitDuplicateFiles<T extends { name: string; size: number }>(
-  selected: T[],
-  completed: Array<{ file_name: string; file_size_bytes?: number }>,
-) {
-  const signatures = new Set(
-    completed
-      .filter((result) => Number.isFinite(result.file_size_bytes))
-      .map((result) => fileSignature(result.file_name, Number(result.file_size_bytes))),
-  );
-  const unique: T[] = [];
-  const duplicates: T[] = [];
-  selected.forEach((file) => {
-    const signature = fileSignature(file.name, file.size);
-    if (signatures.has(signature)) {
-      duplicates.push(file);
-      return;
-    }
-    signatures.add(signature);
-    unique.push(file);
-  });
-  return { unique, duplicates };
 }
 
 function cleanApiKey(value = "") {
