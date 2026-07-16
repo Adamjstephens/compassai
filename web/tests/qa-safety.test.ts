@@ -82,3 +82,18 @@ test("every scorecard receives appointment length and phone confirmation rules",
     assert.equal((bundle.critical_checks ?? []).includes("Appointment Length"), true);
   }
 });
+
+test("Pella project size passes any window or door count of three or greater", () => {
+  const library = sanitizeScorecardLibrary({ scorecards: [{ name: "Pella", bundle: {
+    universal_rules: [],
+    client_rule_sets: { pella: { rules: [{ name: "Project Size", positive_patterns: ["3 windows"], pass_description: "" }] } },
+    critical_checks: ["Project Size"],
+  } }] });
+  const projectSize = library.scorecards?.[0]?.bundle?.client_rule_sets?.pella.rules?.find((rule) => rule.name === "Project Size");
+  assert.match(projectSize?.pass_description ?? "", /ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS/);
+  const patterns = (projectSize?.positive_patterns ?? []).map((pattern) => new RegExp(pattern, "i"));
+  assert.equal(patterns.some((pattern) => pattern.test("The customer needs 3 doors")), true);
+  assert.equal(patterns.some((pattern) => pattern.test("They want 27 windows")), true);
+  assert.equal(patterns.some((pattern) => pattern.test("We need seven doors")), true);
+  assert.equal(patterns.some((pattern) => pattern.test("They need 2 windows")), false);
+});

@@ -403,26 +403,18 @@
                 "name": "Project Size",
                 "type": null,
                 "positive_patterns": [
-                  "\\b3\\s+windows\\b",
-                  "\\bthree\\s+windows\\b",
-                  "\\b4\\s+windows\\b",
-                  "\\bfour\\s+windows\\b",
-                  "\\b5\\s+windows\\b",
-                  "\\bseveral\\s+windows\\b",
-                  "\\bwhole\\s+house\\b",
-                  "\\ball\\s+windows\\b"
+                  "\\b(?:[3-9]|[1-9]\\d+)\\s*(?:windows?|doors?)\\b",
+                  "\\b(?:three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|dozen|several|multiple)\\s+(?:windows?|doors?)\\b",
+                  "\\b(?:windows?|doors?)\\s*[:=-]?\\s*(?:[3-9]|[1-9]\\d+)\\b",
+                  "\\b(?:whole\\s+house|all\\s+(?:the\\s+)?(?:windows?|doors?))\\b"
                 ],
                 "negative_patterns": [
-                  "\\b1\\s+window\\b",
-                  "\\bone\\s+window\\b",
-                  "\\b2\\s+windows\\b",
-                  "\\btwo\\s+windows\\b",
-                  "\\bjust\\s+one\\s+window\\b",
-                  "\\bonly\\s+two\\s+windows\\b"
+                  "\\b(?:1|2|one|two)\\s*(?:windows?|doors?)\\b",
+                  "\\b(?:just|only)\\s+(?:1|2|one|two)\\s*(?:windows?|doors?)\\b"
                 ],
-                "pass_description": "3 windows; three windows; 4 windows; four windows; 5 windows; several windows; whole house; all windows",
-                "fail_description": "1 window; one window; 2 windows; two windows; just one window; only two windows",
-                "mishear_description": "tree windows -> three windows;too windows -> two windows"
+                "pass_description": "ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS. Count windows and doors together when the customer gives a combined project, so two windows plus one door is three and passes. Accept numeric or spoken counts. Whole-house, all-window, several-window, several-door, or multiple-unit projects also pass.",
+                "fail_description": "FAIL when the total project is fewer than 3 windows and doors. One or two total units do not pass. If no reliable project count can be established, mark Needs review rather than inventing a count.",
+                "mishear_description": "tree windows -> three windows; too windows -> two windows"
               },
               {
                 "name": "No unapproved projects",

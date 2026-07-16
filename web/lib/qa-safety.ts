@@ -55,6 +55,23 @@ export const PHONE_CONFIRMATION_RULE: RuleLike = {
   fail_description: "FAIL when no phone or callback number is confirmed anywhere in the complete call, or when the customer says the number is wrong, different, or should not be called. Do not use unrelated numeric evidence. Not applicable is not allowed.",
 };
 
+export const PELLA_PROJECT_SIZE_RULE: RuleLike = {
+  name: "Project Size",
+  positive_patterns: [
+    String.raw`\b(?:[3-9]|[1-9]\d+)\s*(?:windows?|doors?)\b`,
+    String.raw`\b(?:three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|dozen|several|multiple)\s+(?:windows?|doors?)\b`,
+    String.raw`\b(?:windows?|doors?)\s*[:=-]?\s*(?:[3-9]|[1-9]\d+)\b`,
+    String.raw`\b(?:whole\s+house|all\s+(?:the\s+)?(?:windows?|doors?))\b`,
+  ],
+  negative_patterns: [
+    String.raw`\b(?:1|2|one|two)\s*(?:windows?|doors?)\b`,
+    String.raw`\b(?:just|only)\s+(?:1|2|one|two)\s*(?:windows?|doors?)\b`,
+  ],
+  pass_description: "ANY NUMBER OF WINDOWS OR DOORS THAT IS 3 OR GREATER IS A PASS. Count windows and doors together when the customer gives a combined project, so two windows plus one door is three and passes. Accept numeric or spoken counts. Whole-house, all-window, several-window, several-door, or multiple-unit projects also pass.",
+  fail_description: "FAIL when the total project is fewer than 3 windows and doors. One or two total units do not pass. If no reliable project count can be established, mark Needs review rather than inventing a count.",
+  mishear_description: "tree windows -> three windows; too windows -> two windows",
+};
+
 function criterionKey(value = "") {
   return value.toLowerCase().replace(/^critical\s*:\s*/i, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -104,6 +121,17 @@ export function sanitizeScorecardLibrary<T extends LibraryLike>(library: T): T {
       key,
       { ...set, rules: cleanRules(set.rules, universalNames) },
     ]));
+    const scorecardName = String(entry.name || bundle.name || "").toLowerCase();
+    if (scorecardName.includes("pella")) {
+      const polishProjectSize = (rule: RuleLike) => criterionKey(rule.name) === "project size"
+        ? { ...rule, ...PELLA_PROJECT_SIZE_RULE, name: rule.name || PELLA_PROJECT_SIZE_RULE.name }
+        : rule;
+      universalRules = universalRules.map(polishProjectSize);
+      clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => [
+        key,
+        { ...set, rules: (set.rules ?? []).map(polishProjectSize) },
+      ]));
+    }
     if (Object.keys(clientRuleSets).length) {
       clientRuleSets = Object.fromEntries(Object.entries(clientRuleSets).map(([key, set]) => {
         const rules = [...(set.rules ?? [])];
