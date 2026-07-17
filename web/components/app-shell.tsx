@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileAudio,
   FileOutput,
+  Flag,
   Gauge,
   Library,
   Menu,
@@ -29,10 +30,13 @@ import {
   Upload,
   Users,
   X,
+  Brain,
+  Pencil,
 } from "lucide-react";
 import {
   aggregateMissedOpportunities,
   createOpportunityCacheKey,
+  detectCandidateWindows,
   filterMissedOpportunities,
   finalizeMissedOpportunityAnalysis,
   normalizeAnalysisMode,
@@ -47,6 +51,24 @@ import {
 import { splitDuplicateFiles } from "@/lib/file-dedup";
 import { compactLlmRubric, isPhoneConfirmationCriterion, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, verifiedEvidenceOrFallback } from "@/lib/qa-safety";
 import { estimatedSessionCost, formatUsd, gradingCost, transcriptionCost, type CostBreakdown, type TokenUsage } from "@/lib/costs";
+import {
+  buildLearningContext,
+  emptyLearningState,
+  learningConflicts,
+  learningHash,
+  learningSignature,
+  loadLearningState,
+  markLearningUsed,
+  normalizeLearningImport,
+  removeLearningCorrection,
+  saveLearningState,
+  upsertLearningCorrection,
+  type LearningAudit,
+  type LearningCorrection,
+  type LearningScope,
+  type LearningStoreState,
+  type LearningWorkflow,
+} from "@/lib/learning";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -92,6 +114,23 @@ type EditorRow = {
   Evidence: string;
   "Reviewer note": string;
 };
+type LearningCorrectionDraft = {
+  id?: string;
+  workflow: LearningWorkflow;
+  scope: LearningScope;
+  client: string;
+  scorecardId: string;
+  scorecardName: string;
+  criterion: string;
+  originalAnswer: string;
+  correctedAnswer: string;
+  evidence: string;
+  rule: string;
+  transcript: string;
+  model: string;
+  enabled?: boolean;
+};
+type LearningReanalysisOptions = { force?: boolean; learningState?: LearningStoreState };
 type AnalysisRow = {
   category: string;
   check: string;
@@ -116,6 +155,9 @@ type JobResult = {
   actual_qa_model?: string;
   qa_model_fallback?: string;
   missed_opportunity_revision?: number;
+  learning_revision?: number;
+  learning_audit?: LearningAudit;
+  force_regrade_revision?: number;
   analysis_mode?: AnalysisMode;
   file_name: string;
   file_size_bytes?: number;
@@ -181,7 +223,7 @@ const QA_MODEL_OPTIONS = [
 ] as const;
 const QA_MODELS = QA_MODEL_OPTIONS.map((option) => option.id);
 const QA_ENGINE_VERSION = "3";
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.5.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -267,7 +309,7 @@ function stableHash(value: string) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function gradingFingerprint(transcript: string, scorecard: ScorecardEntry, client: string, model: string) {
+function gradingFingerprint(transcript: string, scorecard: ScorecardEntry, client: string, model: string, audit?: LearningAudit, forceRevision = 0) {
   return stableHash(JSON.stringify({
     engine: QA_ENGINE_VERSION,
     transcript,
@@ -276,6 +318,8 @@ function gradingFingerprint(transcript: string, scorecard: ScorecardEntry, clien
     client,
     model,
     reasoning_effort: qaReasoningEffort(model),
+    learning_signature: audit ? learningSignature(audit) : "none",
+    force_revision: forceRevision,
   }));
 }
 
@@ -1017,7 +1061,7 @@ async function requestChatModel(
   }
 }
 
-async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: string, apiKey: string, model: string) {
+async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: string, apiKey: string, model: string, verifiedCorrections: string[] = []) {
   const rubric = compactLlmRubric(scorecard.name, client, rulesFor(scorecard, client));
   const response = await requestChatModel(apiKey, model, {
     response_format: {
@@ -1068,11 +1112,11 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: s
       {
         role: "system",
         content:
-          "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,rule_match,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. rule_match must be pass when an exact quote satisfies the pass rule, fail when an exact quote or the documented absence satisfies the fail rule, and none only when neither rule can be decided. Do not return a separate status; the app derives it from rule_match. Copy an exact transcript quote into result without paraphrasing. For an absence-based fail, result must be 'No supporting statement found.' Critical criteria cannot be pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
+          "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,rule_match,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. rule_match must be pass when an exact quote satisfies the pass rule, fail when an exact quote or the documented absence satisfies the fail rule, and none only when neither rule can be decided. Do not return a separate status; the app derives it from rule_match. Copy an exact transcript quote into result without paraphrasing. For an absence-based fail, result must be 'No supporting statement found.' Critical criteria cannot be pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Verified reviewer corrections are authoritative interpretation examples only when their criterion and evidence match the current call; never copy evidence that is absent from this transcript. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
       },
       {
         role: "user",
-        content: JSON.stringify({ rubric, transcript: transcript.slice(0, 45000) }),
+        content: JSON.stringify({ rubric, verifiedCorrections, transcript: transcript.slice(0, 45000) }),
       },
     ],
   });
@@ -1100,6 +1144,7 @@ async function missedOpportunityDirect(options: {
   model: string;
   previous?: MissedOpportunity[];
   transferOccurred?: boolean;
+  verifiedCorrections?: string[];
 }) {
   return runMissedOpportunityAnalysis({
     transcript: options.transcript,
@@ -1112,7 +1157,7 @@ async function missedOpportunityDirect(options: {
         response_format: missedOpportunityResponseFormat(),
         messages: [
           { role: "system", content: prompt.system },
-          { role: "user", content: prompt.user },
+          { role: "user", content: JSON.stringify({ analysis: JSON.parse(prompt.user), verifiedCorrections: options.verifiedCorrections ?? [] }) },
         ],
       });
       return JSON.parse(response.content || "{}") as MissedOpportunityModelPayload;
@@ -1333,6 +1378,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [estimatedTranscriptionSpendUsd, setEstimatedTranscriptionSpendUsd] = useState(0);
   const [selectedAudioSeconds, setSelectedAudioSeconds] = useState(0);
   const [durationChecking, setDurationChecking] = useState(false);
+  const [learningState, setLearningState] = useState<LearningStoreState>(emptyLearningState());
+  const [learningEditDraft, setLearningEditDraft] = useState<LearningCorrectionDraft | null>(null);
   const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
   const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -1402,6 +1449,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setStatus(`Scorecard library saved: ${normalized.scorecards.length} scorecard(s).`);
   }, []);
 
+  const persistLearning = useCallback(async (next: LearningStoreState) => {
+    setLearningState(next);
+    await saveLearningState(next);
+  }, []);
+
   const refresh = useCallback(async () => {
     const stored = window.localStorage.getItem(JOB_STORAGE);
     if (stored) {
@@ -1418,6 +1470,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setQaModel(validQaModel(window.localStorage.getItem(QA_MODEL_STORAGE) || DEFAULT_QA_MODEL));
     setTheme(window.localStorage.getItem(THEME_STORAGE) === "dark" ? "dark" : "light");
     setAnalysisMode(normalizeAnalysisMode(window.localStorage.getItem(ANALYSIS_MODE_STORAGE)));
+    try {
+      setLearningState(await loadLearningState());
+    } catch (caught) {
+      setError(`Verified learning could not be loaded: ${caught instanceof Error ? caught.message : String(caught)}`);
+    }
     setStatus(key ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
     setCloudStatus(key ? "Saved key; run connection test" : "No OpenAI key saved");
     setHydrated(true);
@@ -1637,6 +1694,30 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
           });
           let opportunityAnalysis: MissedOpportunityAnalysis;
+          const opportunityClient = scorecards ? makeRuleAnalysis(transcriptPayload.transcript, scorecards).client : "Unknown client";
+          const opportunityCriteria = detectCandidateWindows(transcriptPayload.transcript).map((window) => window.category);
+          const missedLearning = buildLearningContext(learningState, {
+            workflow: "missed_opportunity",
+            client: opportunityClient,
+            scorecardId: "opportunity-analysis",
+            scorecardName: "Missed Opportunities",
+            criteria: opportunityCriteria,
+          });
+          const handledLearning = buildLearningContext(learningState, {
+            workflow: "handled_objection",
+            client: opportunityClient,
+            scorecardId: "opportunity-analysis",
+            scorecardName: "Missed Opportunities",
+            criteria: opportunityCriteria,
+          });
+          const opportunityLearningPrompt = [...missedLearning.prompt, ...handledLearning.prompt].slice(0, 3);
+          const opportunityLearningAudit: LearningAudit = {
+            revision: learningState.revision,
+            consideredIds: [...new Set([...missedLearning.audit.consideredIds, ...handledLearning.audit.consideredIds])],
+            suppliedIds: [...new Set([...missedLearning.audit.suppliedIds, ...handledLearning.audit.suppliedIds])].slice(0, 3),
+            conflicts: [...new Set([...missedLearning.audit.conflicts, ...handledLearning.audit.conflicts])],
+            matchReasons: { ...missedLearning.audit.matchReasons, ...handledLearning.audit.matchReasons },
+          };
           try {
             opportunityAnalysis = await missedOpportunityDirect({
               transcript: transcriptPayload.transcript,
@@ -1644,6 +1725,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               apiKey: cleanApiKey(openaiApiKey),
               model: qaModel,
               transferOccurred: transfer.occurred,
+              verifiedCorrections: opportunityLearningPrompt,
             });
           } catch (caught) {
             report = makeErrorReport("Missed-opportunity analysis request", caught, {
@@ -1677,11 +1759,20 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               transfer,
             },
             missed_opportunity_analysis: opportunityAnalysis,
+            learning_revision: learningState.revision,
+            learning_audit: opportunityLearningAudit,
             llm_error_report: report,
           };
         } else {
           const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
-          const gradingKey = gradingFingerprint(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, qaModel);
+          const qaLearning = buildLearningContext(learningState, {
+            workflow: "qa",
+            client: ruleAnalysis.client,
+            scorecardId: ruleAnalysis.entry.id,
+            scorecardName: ruleAnalysis.entry.name,
+            criteria: rulesFor(ruleAnalysis.entry, ruleAnalysis.client).map((rule) => rule.name),
+          });
+          const gradingKey = gradingFingerprint(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, qaModel, qaLearning.audit);
           let qaIdentity = { ...localIdentity };
           let rows = ruleAnalysis.rows;
           let requestedQaModel = qaModel;
@@ -1699,7 +1790,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               progress: (index + 0.65) / selectedFiles.length,
               percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
             });
-            const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, cleanApiKey(openaiApiKey), qaModel);
+            const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, cleanApiKey(openaiApiKey), qaModel, qaLearning.prompt);
             requestedQaModel = qa.requested_model;
             actualQaModel = qa.actual_model;
             qaModelFallback = qa.model_fallback;
@@ -1732,6 +1823,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             requested_qa_model: requestedQaModel,
             actual_qa_model: actualQaModel,
             qa_model_fallback: qaModelFallback,
+            learning_revision: learningState.revision,
+            learning_audit: qaLearning.audit,
             analysis_mode: "qa",
             file_name: file.name,
             file_size_bytes: file.size,
@@ -1794,7 +1887,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     }
   }
 
-  async function regradeResult(jobId: string, resultId: string, scorecardId: string) {
+  async function regradeResult(jobId: string, resultId: string, scorecardId: string, options: { force?: boolean; learningState?: LearningStoreState } = {}) {
     const scorecard = scorecards?.scorecards.find((entry) => entry.id === scorecardId);
     const target = jobs.find((job) => job.job_id === jobId)?.results.find((result) => result.result_id === resultId);
     const key = cleanApiKey(openaiApiKey);
@@ -1807,18 +1900,27 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       return false;
     }
     const ruleAnalysis = makeRuleAnalysisForScorecard(target.transcript_text, scorecard, target.duration_seconds ?? 0);
-    const gradingKey = gradingFingerprint(target.transcript_text, scorecard, ruleAnalysis.client, qaModel);
-    if (target.grading_fingerprint === gradingKey && target.analysis.rows?.length) {
+    const effectiveLearningState = options.learningState ?? learningState;
+    const learning = buildLearningContext(effectiveLearningState, {
+      workflow: "qa",
+      client: ruleAnalysis.client,
+      scorecardId: scorecard.id,
+      scorecardName: scorecard.name,
+      criteria: rulesFor(scorecard, ruleAnalysis.client).map((rule) => rule.name),
+    });
+    const forceRevision = options.force ? (target.force_regrade_revision ?? 0) + 1 : (target.force_regrade_revision ?? 0);
+    const gradingKey = gradingFingerprint(target.transcript_text, scorecard, ruleAnalysis.client, qaModel, learning.audit, forceRevision);
+    if (!options.force && target.grading_fingerprint === gradingKey && target.analysis.rows?.length) {
       setError("");
       setStatus(`Grade unchanged: ${target.file_name} already uses the same transcript, ${scorecard.name}, and ${qaModelLabel(qaModel)} settings.`);
       return true;
     }
     setBusy(true);
     setError("");
-    setStatus(`Re-grading ${target.file_name} with ${scorecard.name} using ${qaModelLabel(qaModel)}...`);
+    setStatus(`Re-grading with ${qaModel} using ${learning.audit.suppliedIds.length} verified correction${learning.audit.suppliedIds.length === 1 ? "" : "s"}...`);
     const started = Date.now();
     try {
-      const qa = await qaDirect(target.transcript_text, scorecard, ruleAnalysis.client, key, qaModel);
+      const qa = await qaDirect(target.transcript_text, scorecard, ruleAnalysis.client, key, qaModel, learning.prompt);
       if (!Array.isArray(qa.rows) || !qa.rows.length) throw new Error("The cloud QA model returned no scorecard rows.");
       const rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, target.transcript_text, target.duration_seconds ?? 0);
       const localIdentity = transcriptIdentity(target.transcript_text);
@@ -1827,6 +1929,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         analysis_mode: "qa",
         grading_revision: (target.grading_revision ?? 0) + 1,
         grading_fingerprint: gradingKey,
+        learning_revision: effectiveLearningState.revision,
+        learning_audit: learning.audit,
+        force_regrade_revision: forceRevision,
         requested_qa_model: qa.requested_model,
         actual_qa_model: qa.actual_model,
         qa_model_fallback: qa.model_fallback,
@@ -1857,6 +1962,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         ? { ...job, results: job.results.map((result) => result.result_id === resultId ? updated : result) }
         : job);
       persistJobs(next);
+      await persistLearning(markLearningUsed(effectiveLearningState, learning.audit.suppliedIds));
       setStatus(qa.model_fallback
         ? `Re-graded with fallback ${qa.actual_model}. Selected ${qa.requested_model} failed; details are saved with the call.`
         : `Re-graded ${target.file_name} with ${scorecard.name} using ${qa.actual_model}. No transcription was rerun.`);
@@ -1875,7 +1981,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     }
   }
 
-  async function analyzeMissedOpportunities(jobId: string, resultId: string, force = false) {
+  async function analyzeMissedOpportunities(jobId: string, resultId: string, options: boolean | { force?: boolean; learningState?: LearningStoreState } = false) {
+    const force = typeof options === "boolean" ? options : Boolean(options.force);
     const target = jobs.find((job) => job.job_id === jobId)?.results.find((result) => result.result_id === resultId);
     const key = cleanApiKey(openaiApiKey);
     if (!target) {
@@ -1886,14 +1993,31 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       setError("Save an OpenAI API key in Settings before analyzing missed opportunities.");
       return false;
     }
-    const cacheKey = createOpportunityCacheKey(target.transcript_text, qaModel);
-    if (!force && target.missed_opportunity_analysis?.cacheKey === cacheKey) {
+    const effectiveLearningState = typeof options === "object" && options.learningState ? options.learningState : learningState;
+    const opportunityClient = target.analysis.client || "Unknown client";
+    const opportunityCriteria = detectCandidateWindows(target.transcript_text).map((window) => window.category);
+    const missedLearning = buildLearningContext(effectiveLearningState, {
+      workflow: "missed_opportunity", client: opportunityClient, scorecardId: "opportunity-analysis", scorecardName: "Missed Opportunities", criteria: opportunityCriteria,
+    });
+    const handledLearning = buildLearningContext(effectiveLearningState, {
+      workflow: "handled_objection", client: opportunityClient, scorecardId: "opportunity-analysis", scorecardName: "Missed Opportunities", criteria: opportunityCriteria,
+    });
+    const suppliedIds = [...new Set([...missedLearning.audit.suppliedIds, ...handledLearning.audit.suppliedIds])].slice(0, 3);
+    const learningAudit: LearningAudit = {
+      revision: effectiveLearningState.revision,
+      consideredIds: [...new Set([...missedLearning.audit.consideredIds, ...handledLearning.audit.consideredIds])],
+      suppliedIds,
+      conflicts: [...new Set([...missedLearning.audit.conflicts, ...handledLearning.audit.conflicts])],
+      matchReasons: { ...missedLearning.audit.matchReasons, ...handledLearning.audit.matchReasons },
+    };
+    const cacheKey = `${createOpportunityCacheKey(target.transcript_text, qaModel)}:${learningSignature(learningAudit)}`;
+    if (!force && target.missed_opportunity_analysis?.cacheKey === cacheKey && target.learning_revision === effectiveLearningState.revision) {
       setStatus("The saved missed-opportunity analysis is already current for this transcript and model.");
       return true;
     }
     setBusy(true);
     setError("");
-    setStatus(`Analyzing missed opportunities in ${target.file_name}...`);
+    setStatus(`Analyzing with ${qaModel} using ${suppliedIds.length} verified correction${suppliedIds.length === 1 ? "" : "s"}...`);
     const started = Date.now();
     try {
       const analysis = await missedOpportunityDirect({
@@ -1903,7 +2027,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         model: qaModel,
         previous: target.missed_opportunity_analysis?.findings,
         transferOccurred: target.analysis.transfer?.occurred,
+        verifiedCorrections: [...missedLearning.prompt, ...handledLearning.prompt].slice(0, 3),
       });
+      analysis.cacheKey = cacheKey;
       const localIdentity = transcriptIdentity(target.transcript_text);
       const updated: JobResult = {
         ...target,
@@ -1918,11 +2044,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           customer_phone: analysis.identity?.customerPhone || target.analysis.customer_phone || localIdentity.customer_phone,
         },
         missed_opportunity_analysis: analysis,
+        learning_revision: effectiveLearningState.revision,
+        learning_audit: learningAudit,
+        force_regrade_revision: force ? (target.force_regrade_revision ?? 0) + 1 : target.force_regrade_revision,
         llm_error_report: "",
       };
       persistJobs(jobs.map((job) => job.job_id === jobId
         ? { ...job, results: job.results.map((result) => result.result_id === resultId ? updated : result) }
         : job));
+      await persistLearning(markLearningUsed(effectiveLearningState, suppliedIds));
       setStatus(`Missed-opportunity analysis complete: ${analysis.summary.total} supported finding${analysis.summary.total === 1 ? "" : "s"}.`);
       return true;
     } catch (caught) {
@@ -1954,6 +2084,55 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       window.localStorage.setItem(JOB_STORAGE, JSON.stringify(next));
       return next;
     });
+  }
+
+  async function saveVerifiedCorrection(draft: LearningCorrectionDraft) {
+    if (!draft.criterion.trim() || !draft.correctedAnswer.trim() || !draft.rule.trim()) {
+      throw new Error("Criterion, corrected answer, and reviewer rule are required.");
+    }
+    if (draft.evidence.trim() && !evidenceIsTranscriptBacked(draft.transcript, draft.evidence)) {
+      throw new Error("Verified evidence must be copied exactly from this transcript.");
+    }
+    const next = upsertLearningCorrection(learningState, {
+      id: draft.id || `learn-${uuid()}`,
+      workflow: draft.workflow,
+      scope: draft.scope,
+      client: draft.client || "Unknown client",
+      scorecardId: draft.scorecardId,
+      scorecardName: draft.scorecardName,
+      criterion: draft.criterion,
+      originalAnswer: draft.originalAnswer,
+      correctedAnswer: draft.correctedAnswer,
+      evidence: draft.evidence,
+      rule: draft.rule,
+      transcriptFingerprint: learningHash(draft.transcript),
+      model: draft.model,
+      enabled: draft.enabled ?? true,
+    });
+    await persistLearning(next);
+    setStatus(`Verified correction saved. Learning revision ${next.revision}.`);
+    return next;
+  }
+
+  async function toggleLearningCorrection(correction: LearningCorrection) {
+    const next = upsertLearningCorrection(learningState, { ...correction, enabled: !correction.enabled });
+    await persistLearning(next);
+  }
+
+  async function deleteLearningCorrection(id: string) {
+    await persistLearning(removeLearningCorrection(learningState, id));
+  }
+
+  async function importLearningFile(file: File | null) {
+    if (!file) return;
+    try {
+      const parsed = normalizeLearningImport(JSON.parse(await file.text()));
+      const next = { ...parsed, revision: Math.max(parsed.revision, learningState.revision) + 1 };
+      await persistLearning(next);
+      setStatus(`Imported ${next.corrections.length} verified correction(s).`);
+    } catch (caught) {
+      setError(`Could not import learning library: ${caught instanceof Error ? caught.message : String(caught)}`);
+    }
   }
 
   function removeJob(jobId: string) {
@@ -2347,6 +2526,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             scorecards={scorecards}
             busy={busy}
             regradeResult={regradeResult}
+            saveCorrection={saveVerifiedCorrection}
           />
         )}
         {view === "review" && analysisMode === "missed_opportunities" && (
@@ -2359,6 +2539,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             busy={busy}
             analyze={analyzeMissedOpportunities}
             updateFinding={updateMissedOpportunity}
+            saveCorrection={saveVerifiedCorrection}
           />
         )}
         {view === "scorecards" && analysisMode === "qa" && (
@@ -2540,8 +2721,41 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               <p className="hint">If a selected transcription model is unavailable, CompassAi falls back to {DEFAULT_TRANSCRIPTION_MODEL}.</p>
               <p className="hint">Economy models reduce cost, but stronger models may interpret ambiguous calls more reliably. Cost estimates use published rates and remain estimates until OpenAI bills the request.</p>
             </div>
+            <div className="api-key-box setting-card learning-center" data-testid="learning-center">
+              <div className="setting-card-title"><Brain size={19} /><div><h4>Verified learning</h4><p>Reuse reviewer-approved corrections without changing model weights.</p></div></div>
+              <div className="learning-summary">
+                <div><span>Corrections</span><strong>{learningState.corrections.length}</strong></div>
+                <div><span>Enabled</span><strong>{learningState.corrections.filter((item) => item.enabled).length}</strong></div>
+                <div><span>Revision</span><strong>{learningState.revision}</strong></div>
+                <div><span>Conflicts</span><strong>{learningConflicts(learningState.corrections).size}</strong></div>
+              </div>
+              <div className="button-row">
+                <a className="download-link" download="compassai_verified_learning.json" href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(learningState, null, 2))}`}><Download size={16} /> Export corrections</a>
+                <label className="file-button"><Upload size={16} /> Import corrections<input type="file" accept=".json,application/json" onChange={(event) => importLearningFile(event.target.files?.[0] ?? null)} /></label>
+                <button className="text-danger" disabled={!learningState.corrections.length} onClick={() => { if (window.confirm("Delete every verified correction from this browser?")) void persistLearning(emptyLearningState()); }}><Trash2 size={16} /> Reset learning</button>
+              </div>
+              {learningConflicts(learningState.corrections).size > 0 && <div className="learning-conflict" role="alert"><TriangleAlert size={17} /><span>Conflicting corrections are withheld from grading until one is edited, disabled, or deleted.</span></div>}
+              <div className="learning-list">
+                {learningState.corrections.map((correction) => {
+                  const conflicted = learningConflicts(learningState.corrections).has(correction.id);
+                  return <article key={correction.id} className={`${correction.enabled ? "" : "disabled"} ${conflicted ? "conflicted" : ""}`}>
+                    <div className="learning-item-head"><div><strong>{correction.criterion}</strong><span>{correction.client} · {correction.scorecardName}</span></div><div className="learning-badges"><span>{correction.workflow.replaceAll("_", " ")}</span><span>{correction.scope}</span>{conflicted && <span className="danger">Conflict</span>}</div></div>
+                    <p><strong>Correct answer:</strong> {correction.correctedAnswer}</p>
+                    {correction.evidence && <blockquote>{correction.evidence}</blockquote>}
+                    <p className="learning-rule"><strong>Reviewer rule:</strong> {correction.rule}</p>
+                    <small>Used {correction.usageCount} time{correction.usageCount === 1 ? "" : "s"}{correction.lastUsedAt ? ` · Last used ${new Date(correction.lastUsedAt).toLocaleDateString()}` : ""} · Revision {correction.revision}</small>
+                    <div className="button-row">
+                      <button onClick={() => setLearningEditDraft({ id: correction.id, workflow: correction.workflow, scope: correction.scope, client: correction.client, scorecardId: correction.scorecardId, scorecardName: correction.scorecardName, criterion: correction.criterion, originalAnswer: correction.originalAnswer, correctedAnswer: correction.correctedAnswer, evidence: correction.evidence, rule: correction.rule, transcript: correction.evidence, model: correction.model, enabled: correction.enabled })}><Pencil size={15} /> Edit</button>
+                      <button onClick={() => void toggleLearningCorrection(correction)}>{correction.enabled ? "Disable" : "Enable"}</button>
+                      <button className="text-danger" onClick={() => { if (window.confirm(`Delete the correction for ${correction.criterion}?`)) void deleteLearningCorrection(correction.id); }}><Trash2 size={15} /> Delete</button>
+                    </div>
+                  </article>;
+                })}
+                {!learningState.corrections.length && <div className="learning-empty"><Brain size={22} /><span>Flag an answer in Review to create the first verified correction.</span></div>}
+              </div>
+            </div>
             <div className="api-key-box setting-card browser-data-card">
-              <div className="setting-card-title"><Trash2 size={19} /><div><h4>Browser data</h4><p>Jobs, scorecard edits, and preferences are stored locally in this browser.</p></div></div>
+              <div className="setting-card-title"><Trash2 size={19} /><div><h4>Browser data</h4><p>Jobs, scorecards, preferences, and verified corrections are stored locally in this browser.</p></div></div>
               <button onClick={clearJobs} disabled={busy || !jobs.length}><Trash2 size={16} /> Clear local jobs and reports</button>
             </div>
             </div>
@@ -2555,6 +2769,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           </section>
         )}
       </main>
+      {learningEditDraft && <LearningCorrectionDialog draft={learningEditDraft} busy={busy} onClose={() => setLearningEditDraft(null)} onSave={async (draft) => { await saveVerifiedCorrection(draft); setLearningEditDraft(null); }} />}
     </div>
   );
 }
@@ -2679,6 +2894,7 @@ function MissedOpportunityReviewPanel({
   busy,
   analyze,
   updateFinding,
+  saveCorrection,
 }: {
   item?: { job: Job; result: JobResult };
   allResults: { job: Job; result: JobResult }[];
@@ -2686,8 +2902,9 @@ function MissedOpportunityReviewPanel({
   headingRef: React.RefObject<HTMLHeadingElement | null>;
   mirrorLeads: MirrorLead[];
   busy: boolean;
-  analyze: (jobId: string, resultId: string, force?: boolean) => Promise<boolean>;
+  analyze: (jobId: string, resultId: string, options?: boolean | LearningReanalysisOptions) => Promise<boolean>;
   updateFinding: (jobId: string, resultId: string, findingId: string, patch: Partial<Pick<MissedOpportunity, "status" | "reviewerNotes">>) => void;
+  saveCorrection: (draft: LearningCorrectionDraft) => Promise<LearningStoreState>;
 }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
@@ -2695,6 +2912,7 @@ function MissedOpportunityReviewPanel({
   const [confidenceFilter, setConfidenceFilter] = useState(.78);
   const [search, setSearch] = useState("");
   const [active, setActive] = useState(0);
+  const [correctionDraft, setCorrectionDraft] = useState<LearningCorrectionDraft | null>(null);
 
   useEffect(() => {
     setTypeFilter("");
@@ -2702,6 +2920,7 @@ function MissedOpportunityReviewPanel({
     setStatusFilter("");
     setSearch("");
     setActive(0);
+    setCorrectionDraft(null);
   }, [item?.result.result_id, item?.result.missed_opportunity_revision]);
 
   const matches = useMemo(() => {
@@ -2758,19 +2977,21 @@ function MissedOpportunityReviewPanel({
           <div><span>Model</span><strong>{analysis?.selectedModel || "Not run"}</strong></div>
           {meta.clover && <a href={meta.clover} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open Clover</a>}
         </div>
+        {result.learning_audit && <LearningAuditPanel audit={result.learning_audit} />}
         {result.llm_error_report && <textarea className="error-report" readOnly value={result.llm_error_report} />}
         {!analysis ? <div className="opportunity-empty"><Target size={30} /><h4>Analyze the saved transcript</h4><p>CompassAi will inspect likely objection windows and return only transcript-supported missed opportunities. The recording will not be transcribed again.</p><button className="primary" disabled={busy} onClick={() => analyze(item.job.job_id, result.result_id)}><Target size={16} /> Analyze missed opportunities</button></div> : (
           <div className="opportunity-review-grid">
             <div className="opportunity-findings">
               <div className="opportunity-filters"><label>Type<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">All types</option>{types.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label><label>Severity<select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value="">All severities</option>{["high", "medium", "low"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{["open", "reviewed", "dismissed", "coached"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Confidence <span>{Math.round(confidenceFilter * 100)}%+</span><input type="range" min="0.5" max="1" step="0.01" value={confidenceFilter} onChange={(event) => setConfidenceFilter(Number(event.target.value))} /></label></div>
               <div className="finding-count"><strong>{findings.length}</strong> of {analysis.findings.length} findings shown · {analysis.candidateCount} candidate window{analysis.candidateCount === 1 ? "" : "s"} checked</div>
-              {findings.length ? findings.map((finding) => <article className={`opportunity-card ${finding.severity}`} key={finding.id} data-testid={`opportunity-${finding.id}`}><header><div><span className="eyebrow">{finding.type.replaceAll("_", " ")}</span><h4>{finding.title}</h4></div><div className="opportunity-badges"><span>{finding.severity}</span><strong>{Math.round(finding.confidence * 100)}%</strong></div></header><p>{finding.summary}</p><div className="opportunity-evidence"><div><span>Customer trigger {finding.customerTrigger.startTime !== undefined ? `· ${reportTime(finding.customerTrigger.startTime)}` : ""}</span><blockquote>{finding.customerTrigger.text}</blockquote></div><div><span>Agent response {finding.agentResponse.startTime !== undefined ? `· ${reportTime(finding.agentResponse.startTime)}` : ""}</span><blockquote>{finding.agentResponse.text}</blockquote></div></div><div className="coaching-box"><strong>Expected action</strong><p>{finding.expectedAction}</p>{finding.suggestedResponse && <><strong>Example response</strong><p>{finding.suggestedResponse}</p></>}</div><div className="finding-review"><label>Review status<select value={finding.status} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { status: event.target.value as MissedOpportunity["status"] })}>{["open", "reviewed", "dismissed", "coached"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Reviewer notes<textarea value={finding.reviewerNotes || ""} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { reviewerNotes: event.target.value })} placeholder="Why this was confirmed, dismissed, or coached..." /></label></div></article>) : <div className="opportunity-empty compact"><CheckCircle2 size={25} /><strong>No findings match these filters</strong><p>{analysis.summary.total ? "Adjust the filters to review other findings." : analysis.disposition.reason}</p></div>}
-              <section className="handled-section" data-testid="handled-objections"><div className="handled-section-heading"><div><span className="eyebrow">Positive coaching</span><h4>Objections handled well</h4></div><strong>{handledObjections.length}</strong></div>{handledObjections.length ? handledObjections.map((handled) => <article className="handled-objection-card" key={handled.id}><header><div><span className="eyebrow">{handled.category.replaceAll("_", " ")}</span><h4>{handled.title}</h4></div><strong>{Math.round(handled.confidence * 100)}%</strong></header><p>{handled.assessment}</p><div className="opportunity-evidence"><div><span>Customer objection {handled.customerTrigger.startTime !== undefined ? `· ${reportTime(handled.customerTrigger.startTime)}` : ""}</span><blockquote>{handled.customerTrigger.text}</blockquote></div><div><span>Effective agent response {handled.agentResponse.startTime !== undefined ? `· ${reportTime(handled.agentResponse.startTime)}` : ""}</span><blockquote>{handled.agentResponse.text}</blockquote></div></div><div className="handled-technique"><CheckCircle2 size={16} /><span><strong>Technique used</strong>{handled.technique}</span></div></article>) : <div className="handled-empty"><CheckCircle2 size={22} /><span>No positively supported objection handling was found in the analyzed windows.</span></div>}</section>
+              {findings.length ? findings.map((finding) => <article className={`opportunity-card ${finding.severity}`} key={finding.id} data-testid={`opportunity-${finding.id}`}><header><div><span className="eyebrow">{finding.type.replaceAll("_", " ")}</span><h4>{finding.title}</h4></div><div className="opportunity-badges"><span>{finding.severity}</span><strong>{Math.round(finding.confidence * 100)}%</strong><button className="flag-answer" onClick={() => setCorrectionDraft({ workflow: "missed_opportunity", scope: "client", client: result.analysis.client || "Unknown client", scorecardId: "opportunity-analysis", scorecardName: "Missed Opportunities", criterion: finding.type, originalAnswer: finding.summary, correctedAnswer: "Remove false finding", evidence: finding.customerTrigger.text, rule: finding.reviewerNotes || "Explain why this should not be treated as a missed opportunity.", transcript: result.transcript_text, model: analysis.selectedModel })}><Flag size={14} /> Flag answer</button></div></header><p>{finding.summary}</p><div className="opportunity-evidence"><div><span>Customer trigger {finding.customerTrigger.startTime !== undefined ? `· ${reportTime(finding.customerTrigger.startTime)}` : ""}</span><blockquote>{finding.customerTrigger.text}</blockquote></div><div><span>Agent response {finding.agentResponse.startTime !== undefined ? `· ${reportTime(finding.agentResponse.startTime)}` : ""}</span><blockquote>{finding.agentResponse.text}</blockquote></div></div><div className="coaching-box"><strong>Expected action</strong><p>{finding.expectedAction}</p>{finding.suggestedResponse && <><strong>Example response</strong><p>{finding.suggestedResponse}</p></>}</div><div className="finding-review"><label>Review status<select value={finding.status} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { status: event.target.value as MissedOpportunity["status"] })}>{["open", "reviewed", "dismissed", "coached"].map((value) => <option key={value}>{value}</option>)}</select></label><label>Reviewer notes<textarea value={finding.reviewerNotes || ""} onChange={(event) => updateFinding(item.job.job_id, result.result_id, finding.id, { reviewerNotes: event.target.value })} placeholder="Why this was confirmed, dismissed, or coached..." /></label></div></article>) : <div className="opportunity-empty compact"><CheckCircle2 size={25} /><strong>No findings match these filters</strong><p>{analysis.summary.total ? "Adjust the filters to review other findings." : analysis.disposition.reason}</p></div>}
+              <section className="handled-section" data-testid="handled-objections"><div className="handled-section-heading"><div><span className="eyebrow">Positive coaching</span><h4>Objections handled well</h4></div><strong>{handledObjections.length}</strong></div>{handledObjections.length ? handledObjections.map((handled) => <article className="handled-objection-card" key={handled.id}><header><div><span className="eyebrow">{handled.category.replaceAll("_", " ")}</span><h4>{handled.title}</h4></div><div className="opportunity-badges"><strong>{Math.round(handled.confidence * 100)}%</strong><button className="flag-answer" onClick={() => setCorrectionDraft({ workflow: "handled_objection", scope: "client", client: result.analysis.client || "Unknown client", scorecardId: "opportunity-analysis", scorecardName: "Missed Opportunities", criterion: handled.category, originalAnswer: handled.assessment, correctedAnswer: "Move to missed opportunity", evidence: handled.customerTrigger.text, rule: "Explain why the agent response did not handle this objection correctly.", transcript: result.transcript_text, model: analysis.selectedModel })}><Flag size={14} /> Flag answer</button></div></header><p>{handled.assessment}</p><div className="opportunity-evidence"><div><span>Customer objection {handled.customerTrigger.startTime !== undefined ? `· ${reportTime(handled.customerTrigger.startTime)}` : ""}</span><blockquote>{handled.customerTrigger.text}</blockquote></div><div><span>Effective agent response {handled.agentResponse.startTime !== undefined ? `· ${reportTime(handled.agentResponse.startTime)}` : ""}</span><blockquote>{handled.agentResponse.text}</blockquote></div></div><div className="handled-technique"><CheckCircle2 size={16} /><span><strong>Technique used</strong>{handled.technique}</span></div></article>) : <div className="handled-empty"><CheckCircle2 size={22} /><span>No positively supported objection handling was found in the analyzed windows.</span></div>}</section>
             </div>
             <section className="transcript-panel opportunity-transcript"><div className="pane-heading"><div><h4>Transcript</h4><p>{fmtSeconds(result.duration_seconds)} call time</p></div></div><div className="searchbar"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search transcript" /><button disabled={!matches.length} onClick={() => setActive((active + matches.length - 1) % matches.length)}>Previous</button><button disabled={!matches.length} onClick={() => setActive((active + 1) % matches.length)}>Next</button><span>{matches.length ? `${active + 1}/${matches.length}` : "0 matches"}</span></div><pre>{highlight(result.transcript_text, search, active)}</pre></section>
           </div>
         )}
       </div>
+      {correctionDraft && <LearningCorrectionDialog draft={correctionDraft} busy={busy} onClose={() => setCorrectionDraft(null)} onSave={async (draft) => { await saveCorrection(draft); setCorrectionDraft(null); }} onSaveAndRegrade={async (draft) => { const nextState = await saveCorrection(draft); if (await analyze(item.job.job_id, result.result_id, { force: true, learningState: nextState })) setCorrectionDraft(null); }} />}
     </section>
   );
 }
@@ -2787,6 +3008,7 @@ function ReviewPanel({
   scorecards,
   busy,
   regradeResult,
+  saveCorrection,
 }: {
   item?: { job: Job; result: JobResult };
   allResults: { job: Job; result: JobResult }[];
@@ -2798,7 +3020,8 @@ function ReviewPanel({
   mirrorLeads: MirrorLead[];
   scorecards: ScorecardLibrary | null;
   busy: boolean;
-  regradeResult: (jobId: string, resultId: string, scorecardId: string) => Promise<boolean>;
+  regradeResult: (jobId: string, resultId: string, scorecardId: string, options?: LearningReanalysisOptions) => Promise<boolean>;
+  saveCorrection: (draft: LearningCorrectionDraft) => Promise<LearningStoreState>;
 }) {
   const [rows, setRows] = useState<EditorRow[]>([]);
   const [finalGrade, setFinalGrade] = useState("Approved");
@@ -2809,6 +3032,8 @@ function ReviewPanel({
   const [savedAt, setSavedAt] = useState("");
   const [regradeOpen, setRegradeOpen] = useState(false);
   const [regradeScorecardId, setRegradeScorecardId] = useState("");
+  const [forceRegrade, setForceRegrade] = useState(false);
+  const [correctionDraft, setCorrectionDraft] = useState<LearningCorrectionDraft | null>(null);
 
   useEffect(() => {
     setRows(item?.result.qa_overrides ?? []);
@@ -2819,6 +3044,8 @@ function ReviewPanel({
     setMobileTab("checks");
     setSavedAt("");
     setRegradeOpen(false);
+    setForceRegrade(false);
+    setCorrectionDraft(null);
     const matchingScorecard = scorecards?.scorecards.find((entry) => entry.name === item?.result.analysis.scorecard_name);
     setRegradeScorecardId(matchingScorecard?.id || scorecards?.active_scorecard_id || scorecards?.scorecards[0]?.id || "");
   }, [item?.result.result_id, item?.result.grading_revision]);
@@ -2929,6 +3156,7 @@ function ReviewPanel({
           {result.qa_model_fallback && <span>Fallback used because: <strong>{result.qa_model_fallback}</strong></span>}
           {result.grading_fingerprint && <span>Stable grade ID: <strong>{result.grading_fingerprint}</strong></span>}
         </div>
+        {result.learning_audit && <LearningAuditPanel audit={result.learning_audit} />}
 
         <div className="review-summary">
           <div><span>QA score</span><strong>{result.metrics?.qa_score ?? 0}%</strong></div>
@@ -2953,7 +3181,7 @@ function ReviewPanel({
                 <thead><tr><th>Qualifier</th><th>System</th><th>Final</th><th>Verified evidence</th><th>Reviewer note</th></tr></thead>
                 <tbody>{rows.map((row, index) => (
                   <tr key={`${row.Qualifier}-${index}`}>
-                    <td><strong>{row.Qualifier}</strong><small>{row.Category}</small></td>
+                    <td><strong>{row.Qualifier}</strong><small>{row.Category}</small><button className="flag-answer" data-testid={`flag-qa-${index}`} onClick={() => setCorrectionDraft({ workflow: "qa", scope: "client", client: result.analysis.client || "Unknown client", scorecardId: regradeScorecardId || "unknown-scorecard", scorecardName: result.analysis.scorecard_name || "Unknown scorecard", criterion: row.Qualifier, originalAnswer: `${row["System status"]}: ${row.Evidence}`, correctedAnswer: row["Final status"], evidence: row.Evidence, rule: row["Reviewer note"], transcript: result.transcript_text, model: result.actual_qa_model || result.requested_qa_model || "gpt-4o-mini" })}><Flag size={13} /> Flag answer</button></td>
                     <td><span className="pill">{row["System status"]}</span></td>
                     <td><select value={row["Final status"]} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, "Final status": event.target.value } : r))}>{(isCriticalCategory(row.Category) ? ["Pass", "Fail", "Needs review"] : ["Pass", "Fail", "Needs review", "Not applicable"]).map((status) => <option key={status}>{status}</option>)}</select></td>
                     <td><textarea value={row.Evidence} onChange={(event) => setRows((current) => current.map((r, i) => i === index ? { ...r, Evidence: event.target.value } : r))} /></td>
@@ -2984,12 +3212,70 @@ function ReviewPanel({
             <label>Choose scorecard<select data-testid="regrade-scorecard" value={regradeScorecardId} onChange={(event) => setRegradeScorecardId(event.target.value)}>{scorecards?.scorecards.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
             {regradeScorecard && <div className="scorecard-preview"><div><span>Client rules</span><strong>{regradeClient || regradeScorecard.name}</strong></div><div><span>QA criteria</span><strong>{regradeRules.length}</strong></div><div><span>Critical checks</span><strong>{regradeCriticalCount}</strong></div></div>}
             <div className="regrade-warning"><TriangleAlert size={18} /><div><strong>Current grading will be replaced</strong><span>Automated decisions, evidence, reviewer overrides, and the final grade will be reset using the selected scorecard. The transcript and call details will remain unchanged.</span></div></div>
+            <label className="force-regrade"><input type="checkbox" checked={forceRegrade} onChange={(event) => setForceRegrade(event.target.checked)} /><span><strong>Force re-grade</strong><small>Run the selected model again even when the transcript, scorecard, and learning revision are unchanged.</small></span></label>
           </div>
-          <footer><button onClick={() => setRegradeOpen(false)} disabled={busy}>Cancel</button><button className="primary" data-testid="confirm-regrade" disabled={busy || !regradeScorecardId} onClick={async () => { if (await regradeResult(item.job.job_id, result.result_id, regradeScorecardId)) setRegradeOpen(false); }}>{busy ? <><RefreshCw className="spinning" size={16} /> Re-grading...</> : <><RefreshCw size={16} /> Re-grade transcript</>}</button></footer>
+          <footer><button onClick={() => setRegradeOpen(false)} disabled={busy}>Cancel</button><button className="primary" data-testid="confirm-regrade" disabled={busy || !regradeScorecardId} onClick={async () => { if (await regradeResult(item.job.job_id, result.result_id, regradeScorecardId, { force: forceRegrade })) setRegradeOpen(false); }}>{busy ? <><RefreshCw className="spinning" size={16} /> Re-grading...</> : <><RefreshCw size={16} /> {forceRegrade ? "Force re-grade" : "Re-grade transcript"}</>}</button></footer>
         </section>
       </div>}
+      {correctionDraft && <LearningCorrectionDialog draft={correctionDraft} busy={busy} onClose={() => setCorrectionDraft(null)} onSave={async (draft) => { await saveCorrection(draft); setCorrectionDraft(null); }} onSaveAndRegrade={async (draft) => { const nextState = await saveCorrection(draft); if (await regradeResult(item.job.job_id, result.result_id, regradeScorecardId, { force: true, learningState: nextState })) setCorrectionDraft(null); }} />}
     </section>
   );
+}
+
+function LearningAuditPanel({ audit }: { audit: LearningAudit }) {
+  return <details className="learning-audit" data-testid="learning-audit">
+    <summary><Brain size={16} /><strong>{audit.suppliedIds.length ? `Learned from ${audit.suppliedIds.length} verified correction${audit.suppliedIds.length === 1 ? "" : "s"}` : "No verified corrections applied"}</strong><span>Learning revision {audit.revision}</span></summary>
+    <div>
+      <p>{audit.consideredIds.length} considered · {audit.suppliedIds.length} supplied to the model · {audit.conflicts.length} withheld for conflict</p>
+      {audit.suppliedIds.map((id) => <code key={id}>{id} · {audit.matchReasons[id] || "Applicable verified correction"}</code>)}
+      {audit.conflicts.length > 0 && <p className="danger-text"><TriangleAlert size={15} /> Conflicting corrections withheld: {audit.conflicts.join(", ")}</p>}
+    </div>
+  </details>;
+}
+
+function LearningCorrectionDialog({ draft, busy, onClose, onSave, onSaveAndRegrade }: {
+  draft: LearningCorrectionDraft;
+  busy: boolean;
+  onClose: () => void;
+  onSave: (draft: LearningCorrectionDraft) => Promise<void>;
+  onSaveAndRegrade?: (draft: LearningCorrectionDraft) => Promise<void>;
+}) {
+  const [value, setValue] = useState(draft);
+  const [dialogError, setDialogError] = useState("");
+  const [saving, setSaving] = useState<"save" | "regrade" | "">("");
+  useEffect(() => { setValue(draft); setDialogError(""); }, [draft]);
+  const answers = value.workflow === "qa"
+    ? ["Pass", "Fail", "Needs review", "Not applicable"]
+    : value.workflow === "missed_opportunity"
+      ? ["Remove false finding", "Keep as missed opportunity", "Handled well"]
+      : ["Handled well", "Move to missed opportunity", "Remove unsupported handled result"];
+  async function submit(kind: "save" | "regrade") {
+    setDialogError("");
+    setSaving(kind);
+    try {
+      if (kind === "regrade" && onSaveAndRegrade) await onSaveAndRegrade(value);
+      else await onSave(value);
+    } catch (caught) {
+      setDialogError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSaving("");
+    }
+  }
+  return <div className="dialog-backdrop">
+    <section className="regrade-dialog learning-dialog" role="dialog" aria-modal="true" aria-labelledby="learning-dialog-title" data-testid="learning-correction-dialog">
+      <header><div className="dialog-icon"><Brain size={20} /></div><div><span className="eyebrow">Verified reviewer learning</span><h3 id="learning-dialog-title">{draft.id ? "Edit correction" : "Flag this answer"}</h3><p>Save a compact, transcript-backed example for future grading. No audio or full transcript is stored.</p></div><button className="icon-button" aria-label="Close correction dialog" onClick={onClose} disabled={busy || Boolean(saving)}><X size={18} /></button></header>
+      <div className="dialog-body correction-form">
+        <div className="correction-context"><span>{value.client}</span><span>{value.scorecardName}</span><span>{value.criterion}</span></div>
+        <label>What was wrong<textarea value={value.originalAnswer} onChange={(event) => setValue({ ...value, originalAnswer: event.target.value })} /></label>
+        <label>Corrected answer<select value={value.correctedAnswer} onChange={(event) => setValue({ ...value, correctedAnswer: event.target.value })}>{answers.map((answer) => <option key={answer}>{answer}</option>)}</select></label>
+        <label>Exact verified evidence<textarea value={value.evidence} onChange={(event) => setValue({ ...value, evidence: event.target.value })} placeholder="Paste a short exact quote from this transcript." /><small>Evidence is rejected when it cannot be found in the transcript. Names and phone numbers are masked before storage.</small></label>
+        <label>Concise interpretation rule<textarea value={value.rule} onChange={(event) => setValue({ ...value, rule: event.target.value })} placeholder="Example: When the customer clearly confirms ownership, grade Homeowner confirmed as Pass." /></label>
+        <label>Scope<select value={value.scope} onChange={(event) => setValue({ ...value, scope: event.target.value as LearningScope })}><option value="client">This client only</option><option value="universal">Universal across clients</option></select><small>Universal corrections can affect other clients. Promote only rules that truly apply everywhere.</small></label>
+        {dialogError && <div className="learning-conflict" role="alert"><TriangleAlert size={17} /><span>{dialogError}</span></div>}
+      </div>
+      <footer><button onClick={onClose} disabled={busy || Boolean(saving)}>Cancel</button><button onClick={() => void submit("save")} disabled={busy || Boolean(saving)}>{saving === "save" ? <><RefreshCw className="spinning" size={16} /> Saving...</> : "Save correction"}</button>{onSaveAndRegrade && <button className="primary" data-testid="save-correction-regrade" onClick={() => void submit("regrade")} disabled={busy || Boolean(saving)}>{saving === "regrade" ? <><RefreshCw className="spinning" size={16} /> Re-grading...</> : "Save correction and re-grade"}</button>}</footer>
+    </section>
+  </div>;
 }
 
 function highlight(text: string, needle: string, active: number) {
