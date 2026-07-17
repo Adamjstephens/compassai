@@ -1,5 +1,5 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type KeyResult = { key: string } | { error: string };
 
@@ -34,11 +34,13 @@ export async function POST(request: Request) {
     if (!response.ok) {
       return jsonError(`OpenAI QA HTTP ${response.status}`, response.status, text.slice(0, 1000));
     }
+    const payload = JSON.parse(text) as { model?: string };
     return new Response(text, {
       status: 200,
       headers: {
         "content-type": response.headers.get("content-type") || "application/json",
         "cache-control": "no-store",
+        "x-compassai-actual-model": String(payload.model ?? ""),
       },
     });
   } catch (error) {

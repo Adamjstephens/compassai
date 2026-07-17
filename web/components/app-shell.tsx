@@ -110,6 +110,10 @@ type TransferAnalysis = {
 type JobResult = {
   result_id: string;
   grading_revision?: number;
+  grading_fingerprint?: string;
+  requested_qa_model?: string;
+  actual_qa_model?: string;
+  qa_model_fallback?: string;
   missed_opportunity_revision?: number;
   analysis_mode?: AnalysisMode;
   file_name: string;
@@ -158,8 +162,18 @@ const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
 const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
-const QA_MODELS = ["gpt-4o-mini", "gpt-5-mini", "gpt-5", "o3"];
-const APP_VERSION = "1.2.2";
+const QA_MODEL_OPTIONS = [
+  { id: "gpt-4o-mini", level: "Basic", detail: "Fastest and lowest cost", reasoning: "" },
+  { id: "gpt-5-mini", level: "Balanced", detail: "Stronger interpretation at moderate cost", reasoning: "medium" },
+  { id: "gpt-5.4-mini", level: "Enhanced", detail: "Newer mini model with stronger reasoning", reasoning: "medium" },
+  { id: "gpt-5", level: "Strong", detail: "Complex transcript and rubric reasoning", reasoning: "high" },
+  { id: "gpt-5.4", level: "Advanced", detail: "Advanced professional reasoning", reasoning: "high" },
+  { id: "gpt-5.5", level: "Advanced Reasoning", detail: "Highest supported reasoning tier", reasoning: "high" },
+  { id: "o3", level: "Advanced Reasoning (legacy)", detail: "Older high-reasoning option", reasoning: "high" },
+] as const;
+const QA_MODELS = QA_MODEL_OPTIONS.map((option) => option.id);
+const QA_ENGINE_VERSION = "3";
+const APP_VERSION = "1.3.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -199,7 +213,41 @@ function validTranscriptionModel(value = "") {
 }
 
 function validQaModel(value = "") {
-  return QA_MODELS.includes(value) ? value : DEFAULT_QA_MODEL;
+  return (QA_MODELS as readonly string[]).includes(value) ? value : DEFAULT_QA_MODEL;
+}
+
+function qaModelOption(model = DEFAULT_QA_MODEL) {
+  return QA_MODEL_OPTIONS.find((option) => option.id === model) ?? QA_MODEL_OPTIONS[0];
+}
+
+function qaModelLabel(model = DEFAULT_QA_MODEL) {
+  const option = qaModelOption(model);
+  return `${option.level} - ${option.id}`;
+}
+
+function qaReasoningEffort(model = DEFAULT_QA_MODEL) {
+  return qaModelOption(model).reasoning;
+}
+
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function gradingFingerprint(transcript: string, scorecard: ScorecardEntry, client: string, model: string) {
+  return stableHash(JSON.stringify({
+    engine: QA_ENGINE_VERSION,
+    transcript,
+    scorecard_id: scorecard.id,
+    scorecard: scorecard.bundle,
+    client,
+    model,
+    reasoning_effort: qaReasoningEffort(model),
+  }));
 }
 
 function normalizePhone(value = "") {
@@ -888,40 +936,125 @@ async function transcribeDirect(file: File, apiKey: string, requestedModel: stri
   }
 }
 
+type ChatModelResult = {
+  content: string;
+  requestedModel: string;
+  actualModel: string;
+  fallbackReason: string;
+};
+
+async function requestChatModel(
+  apiKey: string,
+  requestedModel: string,
+  requestBody: Record<string, unknown>,
+): Promise<ChatModelResult> {
+  const selectedModel = validQaModel(requestedModel || DEFAULT_QA_MODEL);
+  const attempt = async (model: string) => {
+    const reasoningEffort = qaReasoningEffort(model);
+    const response = await fetch("/api/openai/chat", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...requestBody,
+        model,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      }),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 700)}`);
+    const payload = JSON.parse(text);
+    return {
+      content: String(payload.choices?.[0]?.message?.content ?? ""),
+      actualModel: response.headers.get("x-compassai-actual-model") || String(payload.model ?? model),
+    };
+  };
+
+  try {
+    const selected = await attempt(selectedModel);
+    return { ...selected, requestedModel: selectedModel, fallbackReason: "" };
+  } catch (selectedError) {
+    if (selectedModel === DEFAULT_QA_MODEL) throw selectedError;
+    const fallback = await attempt(DEFAULT_QA_MODEL);
+    return {
+      ...fallback,
+      requestedModel: selectedModel,
+      fallbackReason: redactSensitive(selectedError instanceof Error ? selectedError.message : String(selectedError)),
+    };
+  }
+}
+
 async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: string, apiKey: string, model: string) {
   const rubric = compactLlmRubric(scorecard.name, client, rulesFor(scorecard, client));
-  const response = await fetch("/api/openai/chat", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,rule_match,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. rule_match must be pass when an exact quote satisfies the pass rule, fail when an exact quote or the documented absence satisfies the fail rule, and none only when neither rule can be decided. Do not return a separate status; the app derives it from rule_match. Copy an exact transcript quote into result without paraphrasing. For an absence-based fail, result must be 'No supporting statement found.' Critical criteria cannot be pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
+  const response = await requestChatModel(apiKey, model, {
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "compassai_qa_grade",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            agent_name: { type: "string" },
+            customer_name: { type: "string" },
+            customer_phone: { type: "string" },
+            transfer: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                occurred: { type: "boolean" },
+                time: { type: "string" },
+                snippet: { type: "string" },
+                notes: { type: "string" },
+              },
+              required: ["occurred", "time", "snippet", "notes"],
+            },
+            rows: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  check: { type: "string" },
+                  rule_match: { type: "string", enum: ["pass", "fail", "none"] },
+                  result: { type: "string" },
+                  evidence_time: { type: "string" },
+                  category: { type: "string" },
+                },
+                required: ["check", "rule_match", "result", "evidence_time", "category"],
+              },
+            },
+            notes: { type: "string" },
+          },
+          required: ["agent_name", "customer_name", "customer_phone", "transfer", "rows", "notes"],
         },
-        {
-          role: "user",
-          content: JSON.stringify({
-            rubric,
-            transcript: transcript.slice(0, 45000),
-          }),
-        },
-      ],
-    }),
+      },
+    },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a decisive, evidence-based QA auditor. Return compact JSON only: {agent_name,customer_name,customer_phone,transfer:{occurred,time,snippet,notes},rows:[{check,rule_match,result,evidence_time,category}],notes}. The rubric is authoritative. Return every criterion once, unchanged and in order. rule_match must be pass when an exact quote satisfies the pass rule, fail when an exact quote or the documented absence satisfies the fail rule, and none only when neither rule can be decided. Do not return a separate status; the app derives it from rule_match. Copy an exact transcript quote into result without paraphrasing. For an absence-based fail, result must be 'No supporting statement found.' Critical criteria cannot be pass without evidence. Phone confirmation requires an actual confirmed phone or callback number; unrelated numbers are invalid. Detect supported transfers and include a short exact quote. The transcript has no timing metadata, so all time fields must be empty; never estimate timestamps. Identify agent and customer from context. Do not return the full transcript.",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ rubric, transcript: transcript.slice(0, 45000) }),
+      },
+    ],
   });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`CompassAi QA relay HTTP ${response.status}: ${text.slice(0, 700)}`);
-  const payload = JSON.parse(text);
-  return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as {
+  const parsed = JSON.parse(response.content || "{}") as {
     rows?: AnalysisRow[];
     notes?: string;
     agent_name?: string;
     customer_name?: string;
     customer_phone?: string;
     transfer?: Partial<TransferAnalysis>;
+  };
+  return {
+    ...parsed,
+    requested_model: response.requestedModel,
+    actual_model: response.actualModel,
+    model_fallback: response.fallbackReason,
   };
 }
 
@@ -940,22 +1073,14 @@ async function missedOpportunityDirect(options: {
     previous: options.previous,
     transferOccurred: options.transferOccurred,
     evaluate: async (prompt) => {
-      const response = await fetch("/api/openai/chat", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${options.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: options.model,
-          response_format: missedOpportunityResponseFormat(),
-          messages: [
-            { role: "system", content: prompt.system },
-            { role: "user", content: prompt.user },
-          ],
-        }),
+      const response = await requestChatModel(options.apiKey, options.model, {
+        response_format: missedOpportunityResponseFormat(),
+        messages: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
       });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`CompassAi missed-opportunity relay HTTP ${response.status}: ${text.slice(0, 700)}`);
-      const payload = JSON.parse(text);
-      return JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as MissedOpportunityModelPayload;
+      return JSON.parse(response.content || "{}") as MissedOpportunityModelPayload;
     },
   });
 }
@@ -1157,6 +1282,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [rubricRows, setRubricRows] = useState<RubricRow[]>([]);
   const [transcriptionModel, setTranscriptionModel] = useState(DEFAULT_TRANSCRIPTION_MODEL);
   const [qaModel, setQaModel] = useState(DEFAULT_QA_MODEL);
+  const [availableQaModels, setAvailableQaModels] = useState<string[]>([]);
+  const [modelAvailabilityStatus, setModelAvailabilityStatus] = useState("Run the connection test to verify model access.");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("qa");
   const [modeTransition, setModeTransition] = useState<AnalysisMode | null>(null);
@@ -1446,8 +1573,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           };
         } else {
           const ruleAnalysis = makeRuleAnalysis(transcriptPayload.transcript, scorecards, transcriptPayload.duration);
+          const gradingKey = gradingFingerprint(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, qaModel);
           let qaIdentity = { ...localIdentity };
           let rows = ruleAnalysis.rows;
+          let requestedQaModel = qaModel;
+          let actualQaModel = "";
+          let qaModelFallback = "";
+          let modelGradeApplied = false;
           let source = transcriptPayload.chunked
             ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
             : "OpenAI transcription via Vercel relay + browser rule scanner";
@@ -1459,6 +1591,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               percent: Math.round(((index + 0.65) / selectedFiles.length) * 100),
             });
             const qa = await qaDirect(transcriptPayload.transcript, ruleAnalysis.entry, ruleAnalysis.client, cleanApiKey(openaiApiKey), qaModel);
+            requestedQaModel = qa.requested_model;
+            actualQaModel = qa.actual_model;
+            qaModelFallback = qa.model_fallback;
             qaIdentity = {
               agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
               customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
@@ -1466,10 +1601,13 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             };
             transfer = normalizeTransfer(qa.transfer, transcriptPayload.transcript, transcriptPayload.duration);
             if (Array.isArray(qa.rows) && qa.rows.length) {
+              modelGradeApplied = true;
               rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, transcriptPayload.transcript, transcriptPayload.duration);
               source = transcriptPayload.chunked
                 ? `OpenAI transcription (${transcriptPayload.chunk_count} audio parts) + OpenAI QA via Vercel relay`
                 : "OpenAI transcription + OpenAI QA via Vercel relay";
+              source += ` (${qa.actual_model})`;
+              if (qa.model_fallback) source += ` | Requested ${qa.requested_model}; fallback ${qa.actual_model}`;
             }
           } catch (caught) {
             report = makeErrorReport("Cloud QA model request; browser rule scanner was used", caught, {
@@ -1480,6 +1618,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           }
           result = {
             result_id: resultId,
+            grading_fingerprint: modelGradeApplied ? gradingKey : "",
+            requested_qa_model: requestedQaModel,
+            actual_qa_model: actualQaModel,
+            qa_model_fallback: qaModelFallback,
             analysis_mode: "qa",
             file_name: file.name,
             file_size_bytes: file.size,
@@ -1545,12 +1687,18 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       setError("Save an OpenAI API key in Settings before re-grading this call.");
       return false;
     }
+    const ruleAnalysis = makeRuleAnalysisForScorecard(target.transcript_text, scorecard, target.duration_seconds ?? 0);
+    const gradingKey = gradingFingerprint(target.transcript_text, scorecard, ruleAnalysis.client, qaModel);
+    if (target.grading_fingerprint === gradingKey && target.analysis.rows?.length) {
+      setError("");
+      setStatus(`Grade unchanged: ${target.file_name} already uses the same transcript, ${scorecard.name}, and ${qaModelLabel(qaModel)} settings.`);
+      return true;
+    }
     setBusy(true);
     setError("");
-    setStatus(`Re-grading ${target.file_name} with ${scorecard.name}...`);
+    setStatus(`Re-grading ${target.file_name} with ${scorecard.name} using ${qaModelLabel(qaModel)}...`);
     const started = Date.now();
     try {
-      const ruleAnalysis = makeRuleAnalysisForScorecard(target.transcript_text, scorecard, target.duration_seconds ?? 0);
       const qa = await qaDirect(target.transcript_text, scorecard, ruleAnalysis.client, key, qaModel);
       if (!Array.isArray(qa.rows) || !qa.rows.length) throw new Error("The cloud QA model returned no scorecard rows.");
       const rows = normalizeQaRows(qa.rows, ruleAnalysis.rows, target.transcript_text, target.duration_seconds ?? 0);
@@ -1559,12 +1707,18 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         ...target,
         analysis_mode: "qa",
         grading_revision: (target.grading_revision ?? 0) + 1,
+        grading_fingerprint: gradingKey,
+        requested_qa_model: qa.requested_model,
+        actual_qa_model: qa.actual_model,
+        qa_model_fallback: qa.model_fallback,
         grading_seconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
         analysis: {
           ...target.analysis,
           client: ruleAnalysis.client,
           scorecard_name: scorecard.name,
-          source: `OpenAI QA re-grade via Vercel relay (${qaModel})`,
+          source: qa.model_fallback
+            ? `OpenAI QA re-grade via Vercel relay (requested ${qa.requested_model}; fallback ${qa.actual_model})`
+            : `OpenAI QA re-grade via Vercel relay (${qa.actual_model})`,
           rows,
           notes: qa.notes || "",
           agent_name: titleCaseName(qa.agent_name || target.analysis.agent_name || localIdentity.agent_name),
@@ -1580,7 +1734,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         ? { ...job, results: job.results.map((result) => result.result_id === resultId ? updated : result) }
         : job);
       persistJobs(next);
-      setStatus(`Re-graded ${target.file_name} with ${scorecard.name}. No transcription was rerun.`);
+      setStatus(qa.model_fallback
+        ? `Re-graded with fallback ${qa.actual_model}. Selected ${qa.requested_model} failed; details are saved with the call.`
+        : `Re-graded ${target.file_name} with ${scorecard.name} using ${qa.actual_model}. No transcription was rerun.`);
       return true;
     } catch (caught) {
       setError(makeErrorReport("QA re-grade request", caught, {
@@ -1828,6 +1984,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     setApiKeyDraft(trimmed);
     setStatus(trimmed ? "OpenAI key saved in this browser" : "Paste your OpenAI API key in Settings");
     setCloudStatus(trimmed ? "Saved key; run connection test" : "No OpenAI key saved");
+    setAvailableQaModels([]);
+    setModelAvailabilityStatus(trimmed ? "Run the connection test to verify model access." : "Save an API key to check model access.");
     setError("");
   }
 
@@ -1835,6 +1993,8 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     window.localStorage.removeItem(OPENAI_KEY_STORAGE);
     setApiKeyDraft("");
     setOpenaiApiKey("");
+    setAvailableQaModels([]);
+    setModelAvailabilityStatus("Save an API key to check model access.");
     setStatus("Paste your OpenAI API key in Settings");
     setCloudStatus("No OpenAI key saved");
   }
@@ -1856,45 +2016,37 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
       navigateToView("settings");
       return;
     }
-    setCloudStatus("Checking OpenAI relay...");
+    setCloudStatus(`Checking ${qaModelLabel(qaModel)}...`);
     setCloudCheckedAt(new Date().toLocaleTimeString());
     try {
-      const response = await fetch("/api/openai/chat", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: qaModel || DEFAULT_QA_MODEL,
-          messages: [{ role: "user", content: "Reply with OK only." }],
-          max_tokens: 5,
-        }),
+      const modelsResponse = await fetch("/api/openai/models", { headers: { Authorization: `Bearer ${key}` } });
+      const modelsText = await modelsResponse.text();
+      if (!modelsResponse.ok) throw new Error(`Model access HTTP ${modelsResponse.status}: ${modelsText.slice(0, 300)}`);
+      const modelsPayload = JSON.parse(modelsText) as { models?: string[] };
+      const accessible = QA_MODELS.filter((model) => (modelsPayload.models ?? []).includes(model));
+      setAvailableQaModels(accessible);
+      setModelAvailabilityStatus(accessible.length
+        ? `${accessible.length} compatible model${accessible.length === 1 ? "" : "s"} available for this API key.`
+        : "OpenAI returned no compatible CompassAi grading models for this key.");
+
+      const tested = await requestChatModel(key, qaModel, {
+        messages: [{ role: "user", content: "Reply with OK only." }],
       });
-      const text = await response.text();
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 260)}`);
-      setCloudStatus(`Online: ${qaModel || DEFAULT_QA_MODEL} responded through CompassAi relay`);
-      setError("");
-    } catch (caught) {
-      if ((qaModel || DEFAULT_QA_MODEL) !== DEFAULT_QA_MODEL) {
-        try {
-          const fallback = await fetch("/api/openai/chat", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: DEFAULT_QA_MODEL,
-              messages: [{ role: "user", content: "Reply with OK only." }],
-              max_tokens: 5,
-            }),
-          });
-          if (fallback.ok) {
-            setCloudStatus(`Online with fallback: ${DEFAULT_QA_MODEL}. Selected model failed.`);
-            setError(makeErrorReport("Cloud LLM selected-model check", caught, { selected_model: qaModel, fallback_model: DEFAULT_QA_MODEL }));
-            return;
-          }
-        } catch {
-          // Preserve the original selected-model error below.
-        }
+      if (tested.fallbackReason) {
+        setCloudStatus(`Fallback active: requested ${tested.requestedModel}, actual ${tested.actualModel}`);
+        setError(makeErrorReport("Cloud LLM selected-model check", tested.fallbackReason, {
+          selected_model: tested.requestedModel,
+          actual_model: tested.actualModel,
+          fallback_model: DEFAULT_QA_MODEL,
+        }));
+      } else {
+        setCloudStatus(`Online: requested ${tested.requestedModel}, actual ${tested.actualModel}`);
+        setError("");
       }
+    } catch (caught) {
       const report = makeErrorReport("Cloud LLM live connection check", caught, { selected_model: qaModel || DEFAULT_QA_MODEL });
       setCloudStatus("Offline or rejected by OpenAI relay");
+      setModelAvailabilityStatus("Model availability check failed. See the error report.");
       setError(report);
     }
   }
@@ -2215,13 +2367,25 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               </label>
               <label>{analysisMode === "qa" ? "QA model:" : "Opportunity analysis model:"}
                 <select value={qaModel} onChange={(event) => setQaModel(event.target.value)}>
-                  {QA_MODELS.map((model) => <option key={model}>{model}</option>)}
+                  {QA_MODEL_OPTIONS.map((option) => {
+                    const checked = availableQaModels.length > 0;
+                    const available = availableQaModels.includes(option.id);
+                    return <option key={option.id} value={option.id} disabled={checked && !available}>
+                      {option.level} - {option.id}{checked ? available ? " - Available" : " - Not available" : ""}
+                    </option>;
+                  })}
                 </select>
               </label>
+              <div className="model-choice-summary">
+                <strong>{qaModelLabel(qaModel)}</strong>
+                <span>{qaModelOption(qaModel).detail}</span>
+                <span>{qaReasoningEffort(qaModel) ? `${qaReasoningEffort(qaModel)} reasoning effort` : "Fast non-reasoning model"}</span>
+              </div>
               <div className="button-row">
                 <button className="primary" onClick={saveModelSettings}>Save model settings</button>
               </div>
-              <p className="hint">If a selected transcription model is unavailable, CompassAi automatically falls back to {DEFAULT_TRANSCRIPTION_MODEL}. Use Test OpenAI connection to confirm the cloud QA model and API key are working.</p>
+              <p className="hint">{modelAvailabilityStatus} QA uses the selected model when OpenAI accepts it and falls back to {DEFAULT_QA_MODEL} only after a real selected-model failure. Requested and actual models are saved with each grade.</p>
+              <p className="hint">If a selected transcription model is unavailable, CompassAi falls back to {DEFAULT_TRANSCRIPTION_MODEL}.</p>
             </div>
             <div className="api-key-box setting-card browser-data-card">
               <div className="setting-card-title"><Trash2 size={19} /><div><h4>Browser data</h4><p>Jobs, scorecard edits, and preferences are stored locally in this browser.</p></div></div>
@@ -2231,7 +2395,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             <div className="settings-grid">
               <div><strong>Web based, CompassAi</strong><p>No downloads, quick, secure, quality.</p></div>
               <div><strong>{transcriptionModel}</strong><p>Used for audio transcription through CompassAi's same-origin relay.</p></div>
-              <div><strong>{qaModel}</strong><p>Used for {analysisMode === "qa" ? "QA grading and evidence review" : "missed-opportunity context analysis"}.</p></div>
+              <div><strong>{qaModelLabel(qaModel)}</strong><p>Used for {analysisMode === "qa" ? "QA grading and evidence review" : "missed-opportunity context analysis"}.</p></div>
               <div><span>Cloud LLM Status</span><strong>{cloudStatus}</strong><p>{cloudCheckedAt ? `Last checked ${cloudCheckedAt}.` : "Use Test OpenAI connection for live API status."}</p></div>
               <div><span>Appearance</span><strong>{theme === "dark" ? "Dark mode" : "Light mode"}</strong><p>Saved locally for this browser.</p></div>
             </div>
@@ -2601,6 +2765,13 @@ function ReviewPanel({
             <button onClick={reset} disabled={!dirty}>Reset</button>
             <button className="primary" data-testid="save-qa-overrides" onClick={save} disabled={!dirty}>Save overrides</button>
           </div>
+        </div>
+
+        <div className={`model-provenance ${result.qa_model_fallback ? "fallback" : ""}`}>
+          <span>Requested model: <strong>{result.requested_qa_model || "Legacy result"}</strong></span>
+          <span>Actual model: <strong>{result.actual_qa_model || "Not recorded"}</strong></span>
+          {result.qa_model_fallback && <span>Fallback used because: <strong>{result.qa_model_fallback}</strong></span>}
+          {result.grading_fingerprint && <span>Stable grade ID: <strong>{result.grading_fingerprint}</strong></span>}
         </div>
 
         <div className="review-summary">

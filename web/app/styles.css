@@ -814,6 +814,13 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .setting-card-title { display: flex; align-items: flex-start; gap: 9px; }
 .setting-card-title svg { color: var(--brand-dark); margin-top: 2px; }
 .setting-card-title p { margin: 3px 0 0; color: var(--muted); font-size: .84rem; }
+.model-choice-summary { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-soft); }
+.model-choice-summary strong { color: var(--text); }
+.model-choice-summary span { color: var(--muted); font-size: .82rem; }
+.model-provenance { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--panel-soft); color: var(--muted); font-size: .82rem; }
+.model-provenance strong { color: var(--text); }
+.model-provenance.fallback { background: #fff7ed; color: #9a3412; }
+:root[data-theme="dark"] .model-provenance.fallback { background: #431407; color: #fed7aa; }
 .browser-data-card button { justify-self: start; color: #b91c1c; }
 
 :root[data-theme="dark"] .section-icon { background: #123d3b; color: #5eead4; }
