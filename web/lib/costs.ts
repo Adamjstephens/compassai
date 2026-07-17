@@ -29,12 +29,14 @@ export const QA_USD_PER_MILLION_TOKENS: Record<string, { input: number; output: 
 };
 
 export function transcriptionCost(model: string, seconds: number) {
-  const rate = TRANSCRIPTION_USD_PER_MINUTE[model] ?? TRANSCRIPTION_USD_PER_MINUTE["gpt-4o-mini-transcribe"];
+  const baseModel = Object.keys(TRANSCRIPTION_USD_PER_MINUTE).find((candidate) => model === candidate || model.startsWith(`${candidate}-`));
+  const rate = TRANSCRIPTION_USD_PER_MINUTE[baseModel ?? "gpt-4o-mini-transcribe"];
   return Math.max(0, seconds) / 60 * rate;
 }
 
 export function gradingCost(model: string, usage: TokenUsage) {
-  const rate = QA_USD_PER_MILLION_TOKENS[model] ?? QA_USD_PER_MILLION_TOKENS["gpt-4o-mini"];
+  const baseModel = Object.keys(QA_USD_PER_MILLION_TOKENS).find((candidate) => model === candidate || model.startsWith(`${candidate}-`));
+  const rate = QA_USD_PER_MILLION_TOKENS[baseModel ?? "gpt-4o-mini"];
   return (Math.max(0, usage.promptTokens) * rate.input + Math.max(0, usage.completionTokens) * rate.output) / 1_000_000;
 }
 
