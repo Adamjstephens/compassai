@@ -114,6 +114,10 @@ textarea { min-height: 140px; resize: vertical; }
 .side-card button { margin-top: 10px; width: 100%; }
 .hours-saved-card { border-color: rgba(45, 212, 191, .4); }
 .hours-saved-card strong { color: #ccfbf1; line-height: 1.4; }
+.spend-card { border-color: rgba(96, 165, 250, .42); }
+.spend-card strong { color: #dbeafe; font-size: 1.25rem; }
+.spend-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
+.spend-breakdown span { margin: 0; padding: 5px 6px; border-radius: 5px; background: rgba(255,255,255,.055); color: #bfdbfe; font-size: .68rem; font-weight: 750; }
 
 main { padding: 22px; min-width: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 12px; }
@@ -596,6 +600,27 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .section-icon.failed { color: #b91c1c; background: #fee2e2; }
 .drop { margin: 16px 0 0; }
 .drop input { min-height: 42px; }
+.cost-preflight {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) minmax(190px, 1.2fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.cost-preflight > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+.cost-preflight span { color: var(--muted); font-size: .7rem; font-weight: 850; text-transform: uppercase; }
+.cost-preflight strong { font-size: 1rem; overflow-wrap: break-word; }
+.cost-preflight small { font-size: .7rem; }
+.cost-preflight-total { border-color: color-mix(in srgb, var(--brand) 45%, var(--border)) !important; background: color-mix(in srgb, var(--brand) 7%, var(--panel)) !important; }
+.cost-preflight-total strong { color: var(--brand-dark); font-size: 1.15rem; }
 .inline-notice { margin-top: 10px; background: #fffbeb; border-color: #fde68a; color: #92400e; }
 
 .job-workspace { display: grid; gap: 16px; }
@@ -879,6 +904,7 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .topbar { grid-template-columns: 1fr; }
   .topbar-controls { justify-content: space-between; }
   .opportunity-filters { grid-template-columns: 1fr 1fr; }
+  .cost-preflight { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -893,6 +919,7 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
   .queue-heading, .report-heading, .section-heading { grid-template-columns: auto minmax(0, 1fr); }
   .queue-heading > button, .report-heading > button { grid-column: 1 / -1; width: 100%; }
   .drop { grid-template-columns: 1fr; }
+  .cost-preflight { grid-template-columns: 1fr; }
   .completed-grid { grid-template-columns: 1fr; }
   .call-facts, .review-summary, .import-summary { grid-template-columns: 1fr 1fr; }
   .review-toolbar-actions { display: grid; grid-template-columns: 1fr 1fr; align-items: end; }

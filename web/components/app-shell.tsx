@@ -46,6 +46,7 @@ import {
 } from "@/lib/missed-opportunities";
 import { splitDuplicateFiles } from "@/lib/file-dedup";
 import { compactLlmRubric, isPhoneConfirmationCriterion, NO_VERIFIED_EVIDENCE, pairModelRows, phoneConfirmationExcerpt, resolveModelQaStatus, sanitizeScorecardLibrary, transcriptEvidenceExcerpt, verifiedEvidenceOrFallback } from "@/lib/qa-safety";
+import { estimatedSessionCost, formatUsd, gradingCost, transcriptionCost, type CostBreakdown, type TokenUsage } from "@/lib/costs";
 
 type AppView = "jobs" | "review" | "scorecards" | "mirrorcxt" | "settings";
 
@@ -136,6 +137,11 @@ type JobResult = {
   llm_error_report?: string;
   duration_seconds?: number;
   grading_seconds?: number;
+  estimated_transcription_cost_usd?: number;
+  estimated_grading_cost_usd?: number;
+  estimated_total_cost_usd?: number;
+  qa_prompt_tokens?: number;
+  qa_completion_tokens?: number;
   missed_opportunity_analysis?: MissedOpportunityAnalysis;
 };
 type Job = {
@@ -154,6 +160,7 @@ type Job = {
 const OPENAI_KEY_STORAGE = "compassai.openaiApiKey";
 const JOB_STORAGE = "compassai.vercelOnly.jobs";
 const HOURS_SAVED_STORAGE = "compassai.hoursSaved";
+const SPEND_STORAGE = "compassai.estimatedSpend";
 const SCORECARD_STORAGE = "compassai.scorecards";
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const DEFAULT_QA_MODEL = "gpt-4o-mini";
@@ -161,9 +168,10 @@ const TRANSCRIPTION_MODEL_STORAGE = "compassai.transcriptionModel";
 const QA_MODEL_STORAGE = "compassai.qaModel";
 const THEME_STORAGE = "compassai.theme";
 const ANALYSIS_MODE_STORAGE = "compassai.analysisMode";
-const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
+const TRANSCRIPTION_MODELS = ["whisper-1", "gpt-4o-mini-transcribe", "gpt-4o-transcribe"];
 const QA_MODEL_OPTIONS = [
-  { id: "gpt-4o-mini", level: "Basic", detail: "Fastest and lowest cost", reasoning: "" },
+  { id: "gpt-5-nano", level: "Economy", detail: "Lowest-cost structured QA option", reasoning: "medium" },
+  { id: "gpt-4o-mini", level: "Basic", detail: "Fast, low-cost grading", reasoning: "" },
   { id: "gpt-5-mini", level: "Balanced", detail: "Stronger interpretation at moderate cost", reasoning: "medium" },
   { id: "gpt-5.4-mini", level: "Enhanced", detail: "Newer mini model with stronger reasoning", reasoning: "medium" },
   { id: "gpt-5", level: "Strong", detail: "Complex transcript and rubric reasoning", reasoning: "high" },
@@ -173,7 +181,7 @@ const QA_MODEL_OPTIONS = [
 ] as const;
 const QA_MODELS = QA_MODEL_OPTIONS.map((option) => option.id);
 const QA_ENGINE_VERSION = "3";
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -187,6 +195,21 @@ function fmtSeconds(value = 0) {
   const minutes = Math.floor(value / 60);
   const seconds = Math.round(value % 60);
   return minutes ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
+function audioDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    const finish = (value = 0) => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(value) ? Math.max(0, value) : 0);
+    };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => finish(audio.duration);
+    audio.onerror = () => finish(0);
+    audio.src = url;
+  });
 }
 
 function escapeHtml(value: unknown) {
@@ -210,6 +233,12 @@ function redactSensitive(value: unknown) {
 
 function validTranscriptionModel(value = "") {
   return TRANSCRIPTION_MODELS.includes(value) ? value : DEFAULT_TRANSCRIPTION_MODEL;
+}
+
+function transcriptionModelLabel(model: string) {
+  if (model === "whisper-1") return "Economy - Whisper 1 ($0.006/min)";
+  if (model === "gpt-4o-transcribe") return "Highest accuracy - GPT-4o Transcribe";
+  return "Recommended - GPT-4o Mini Transcribe";
 }
 
 function validQaModel(value = "") {
@@ -941,6 +970,7 @@ type ChatModelResult = {
   requestedModel: string;
   actualModel: string;
   fallbackReason: string;
+  usage: TokenUsage;
 };
 
 async function requestChatModel(
@@ -966,6 +996,10 @@ async function requestChatModel(
     return {
       content: String(payload.choices?.[0]?.message?.content ?? ""),
       actualModel: response.headers.get("x-compassai-actual-model") || String(payload.model ?? model),
+      usage: {
+        promptTokens: Number(payload.usage?.prompt_tokens) || 0,
+        completionTokens: Number(payload.usage?.completion_tokens) || 0,
+      },
     };
   };
 
@@ -1055,6 +1089,7 @@ async function qaDirect(transcript: string, scorecard: ScorecardEntry, client: s
     requested_model: response.requestedModel,
     actual_model: response.actualModel,
     model_fallback: response.fallbackReason,
+    usage: response.usage,
   };
 }
 
@@ -1291,6 +1326,11 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const [hydrated, setHydrated] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hoursSavedSeconds, setHoursSavedSeconds] = useState(0);
+  const [estimatedSpendUsd, setEstimatedSpendUsd] = useState(0);
+  const [estimatedGradingSpendUsd, setEstimatedGradingSpendUsd] = useState(0);
+  const [estimatedTranscriptionSpendUsd, setEstimatedTranscriptionSpendUsd] = useState(0);
+  const [selectedAudioSeconds, setSelectedAudioSeconds] = useState(0);
+  const [durationChecking, setDurationChecking] = useState(false);
   const scorecardEditorRef = useRef<HTMLDivElement | null>(null);
   const scorecardNameInputRef = useRef<HTMLInputElement | null>(null);
   const reviewHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -1301,6 +1341,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   const reportableResults = results.filter(({ result }) => analysisMode === "qa"
     ? Boolean(result.qa_overrides?.length || result.analysis.rows?.length)
     : Boolean(result.missed_opportunity_analysis));
+  const selectedCostEstimate = useMemo(
+    () => estimatedSessionCost(transcriptionModel, qaModel, selectedAudioSeconds),
+    [qaModel, selectedAudioSeconds, transcriptionModel],
+  );
 
   const updateLocation = useCallback((nextView: AppView, resultId = "", mode: "push" | "replace" = "push") => {
     const url = new URL(window.location.href);
@@ -1409,6 +1453,23 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const selectedFiles = files ? Array.from(files) : [];
+    if (!selectedFiles.length) {
+      setSelectedAudioSeconds(0);
+      setDurationChecking(false);
+      return;
+    }
+    setDurationChecking(true);
+    Promise.all(selectedFiles.map(audioDuration)).then((durations) => {
+      if (cancelled) return;
+      setSelectedAudioSeconds(durations.reduce((sum, duration) => sum + duration, 0));
+      setDurationChecking(false);
+    });
+    return () => { cancelled = true; };
+  }, [files]);
+
+  useEffect(() => {
     if (!hydrated) return;
     let stored: { seconds: number; resultIds: string[] } = { seconds: 0, resultIds: [] };
     try {
@@ -1435,6 +1496,45 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     const next = { seconds, resultIds: Array.from(resultIds) };
     window.localStorage.setItem(HOURS_SAVED_STORAGE, JSON.stringify(next));
     setHoursSavedSeconds(seconds);
+  }, [hydrated, jobs]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    type SpendSnapshot = { total: number; transcription: number; grading: number };
+    let stored: { usd: number; transcriptionUsd: number; gradingUsd: number; resultCosts: Record<string, SpendSnapshot> } = { usd: 0, transcriptionUsd: 0, gradingUsd: 0, resultCosts: {} };
+    try {
+      const raw = window.localStorage.getItem(SPEND_STORAGE);
+      if (raw) stored = { ...stored, ...JSON.parse(raw) };
+    } catch {
+      // Rebuild from cost snapshots still stored with completed results.
+    }
+    const resultCosts = stored.resultCosts && typeof stored.resultCosts === "object" ? { ...stored.resultCosts } : {};
+    let usd = Number.isFinite(stored.usd) ? Math.max(0, stored.usd) : 0;
+    let transcriptionUsd = Number.isFinite(stored.transcriptionUsd) ? Math.max(0, stored.transcriptionUsd) : 0;
+    let gradingUsd = Number.isFinite(stored.gradingUsd) ? Math.max(0, stored.gradingUsd) : 0;
+    jobs.flatMap((job) => job.results).forEach((result) => {
+      const current: SpendSnapshot = {
+        total: Math.max(0, Number(result.estimated_total_cost_usd) || 0),
+        transcription: Math.max(0, Number(result.estimated_transcription_cost_usd) || 0),
+        grading: Math.max(0, Number(result.estimated_grading_cost_usd) || 0),
+      };
+      const prior = resultCosts[result.result_id];
+      const accounted: SpendSnapshot = typeof prior === "number"
+        ? { total: Math.max(0, prior), transcription: 0, grading: 0 }
+        : { total: Math.max(0, prior?.total || 0), transcription: Math.max(0, prior?.transcription || 0), grading: Math.max(0, prior?.grading || 0) };
+      if (current.total > accounted.total) usd += current.total - accounted.total;
+      if (current.transcription > accounted.transcription) transcriptionUsd += current.transcription - accounted.transcription;
+      if (current.grading > accounted.grading) gradingUsd += current.grading - accounted.grading;
+      resultCosts[result.result_id] = {
+        total: Math.max(current.total, accounted.total),
+        transcription: Math.max(current.transcription, accounted.transcription),
+        grading: Math.max(current.grading, accounted.grading),
+      };
+    });
+    window.localStorage.setItem(SPEND_STORAGE, JSON.stringify({ usd, transcriptionUsd, gradingUsd, resultCosts }));
+    setEstimatedSpendUsd(usd);
+    setEstimatedTranscriptionSpendUsd(transcriptionUsd);
+    setEstimatedGradingSpendUsd(gradingUsd);
   }, [hydrated, jobs]);
 
   useEffect(() => {
@@ -1518,7 +1618,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           progress: index / selectedFiles.length + 0.05,
           percent: Math.max(2, Math.round((index / selectedFiles.length) * 100)),
         });
+        const browserDuration = await audioDuration(file);
         const transcriptPayload = await transcribeDirect(file, cleanApiKey(openaiApiKey), transcriptionModel);
+        if (!transcriptPayload.duration && browserDuration) transcriptPayload.duration = browserDuration;
+        const transcriptionUsd = transcriptionCost(transcriptPayload.model_used, transcriptPayload.duration);
         const gradingStarted = Date.now();
         const localIdentity = transcriptIdentity(transcriptPayload.transcript);
         let transfer = normalizeTransfer(undefined, transcriptPayload.transcript, transcriptPayload.duration);
@@ -1561,6 +1664,9 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             transcript_text: transcriptPayload.transcript,
             duration_seconds: transcriptPayload.duration,
             grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
+            estimated_transcription_cost_usd: transcriptionUsd,
+            estimated_grading_cost_usd: estimatedSessionCost(transcriptPayload.model_used, qaModel, transcriptPayload.duration).gradingUsd,
+            estimated_total_cost_usd: estimatedSessionCost(transcriptPayload.model_used, qaModel, transcriptPayload.duration).totalUsd,
             analysis: {
               source: `OpenAI transcription + missed-opportunity analysis via Vercel relay (${qaModel})`,
               agent_name: titleCaseName(opportunityAnalysis.identity?.agentName || localIdentity.agent_name),
@@ -1580,6 +1686,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           let actualQaModel = "";
           let qaModelFallback = "";
           let modelGradeApplied = false;
+          let qaUsage: TokenUsage = { promptTokens: 0, completionTokens: 0 };
           let source = transcriptPayload.chunked
             ? `OpenAI transcription via Vercel relay (${transcriptPayload.chunk_count} audio parts) + browser rule scanner`
             : "OpenAI transcription via Vercel relay + browser rule scanner";
@@ -1594,6 +1701,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             requestedQaModel = qa.requested_model;
             actualQaModel = qa.actual_model;
             qaModelFallback = qa.model_fallback;
+            qaUsage = qa.usage;
             qaIdentity = {
               agent_name: titleCaseName(qa.agent_name || localIdentity.agent_name),
               customer_name: titleCaseName(qa.customer_name || localIdentity.customer_name),
@@ -1628,6 +1736,15 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
             transcript_text: transcriptPayload.transcript,
             duration_seconds: transcriptPayload.duration,
             grading_seconds: Math.max(1, Math.round((Date.now() - gradingStarted) / 1000)),
+            qa_prompt_tokens: qaUsage.promptTokens,
+            qa_completion_tokens: qaUsage.completionTokens,
+            estimated_transcription_cost_usd: transcriptionUsd,
+            estimated_grading_cost_usd: modelGradeApplied
+              ? gradingCost(actualQaModel || qaModel, qaUsage)
+              : 0,
+            estimated_total_cost_usd: transcriptionUsd + (modelGradeApplied
+              ? gradingCost(actualQaModel || qaModel, qaUsage)
+              : 0),
             analysis: {
               client: ruleAnalysis.client,
               scorecard_name: ruleAnalysis.entry.name,
@@ -1712,6 +1829,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
         actual_qa_model: qa.actual_model,
         qa_model_fallback: qa.model_fallback,
         grading_seconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
+        qa_prompt_tokens: (target.qa_prompt_tokens ?? 0) + qa.usage.promptTokens,
+        qa_completion_tokens: (target.qa_completion_tokens ?? 0) + qa.usage.completionTokens,
+        estimated_grading_cost_usd: (target.estimated_grading_cost_usd ?? 0) + gradingCost(qa.actual_model || qaModel, qa.usage),
+        estimated_total_cost_usd: (target.estimated_total_cost_usd ?? target.estimated_transcription_cost_usd ?? 0) + gradingCost(qa.actual_model || qaModel, qa.usage),
         analysis: {
           ...target.analysis,
           client: ruleAnalysis.client,
@@ -2121,6 +2242,12 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           <strong>Hours saved, using CompassAi: {(hoursSavedSeconds / 3600).toFixed(1)}</strong>
           <p>Saved only in this browser.</p>
         </section>
+        <section className="side-card spend-card" title="Estimated from OpenAI's published model rates and usage returned by completed QA requests. Your OpenAI invoice is authoritative.">
+          <div className="side-card-title"><Gauge size={16} /><span>Estimated API spend</span></div>
+          <strong>{formatUsd(estimatedSpendUsd)}</strong>
+          <div className="spend-breakdown"><span>Grading {formatUsd(estimatedGradingSpendUsd)}</span><span>Transcription {formatUsd(estimatedTranscriptionSpendUsd)}</span></div>
+          <p>Tracked in this browser. OpenAI billing is authoritative.</p>
+        </section>
       </aside>
       <main>
         <header className="topbar">
@@ -2158,6 +2285,29 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
                   <AudioLines size={17} /> {busy ? "Processing calls..." : "Upload and process"}
                 </button>
               </div>
+              {files?.length ? (
+                <div className="cost-preflight" data-testid="cost-preflight">
+                  <div>
+                    <span>Selected audio</span>
+                    <strong>{durationChecking ? "Reading duration..." : `${files.length} file(s) · ${fmtSeconds(selectedAudioSeconds)}`}</strong>
+                  </div>
+                  <div>
+                    <span>Transcription estimate</span>
+                    <strong>{durationChecking ? "—" : formatUsd(selectedCostEstimate.transcriptionUsd)}</strong>
+                    <small>{transcriptionModel}</small>
+                  </div>
+                  <div>
+                    <span>Grading estimate</span>
+                    <strong>{durationChecking ? "—" : formatUsd(selectedCostEstimate.gradingUsd)}</strong>
+                    <small>{qaModel}</small>
+                  </div>
+                  <div className="cost-preflight-total">
+                    <span>Estimated session total</span>
+                    <strong>{durationChecking ? "—" : formatUsd(selectedCostEstimate.totalUsd)}</strong>
+                    <small>Estimate only; OpenAI billing is authoritative.</small>
+                  </div>
+                </div>
+              ) : null}
               {!cleanApiKey(openaiApiKey) && <button className="inline-notice" onClick={() => navigateToView("settings")}>Add your OpenAI API key in Settings before uploading recordings.</button>}
             </section>
             <JobList
@@ -2362,7 +2512,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               <div className="setting-card-title"><Bot size={19} /><div><h4>AI models</h4><p>Select preferred cloud models with automatic fallback.</p></div></div>
               <label>Transcription model
                 <select value={transcriptionModel} onChange={(event) => setTranscriptionModel(event.target.value)}>
-                  {TRANSCRIPTION_MODELS.map((model) => <option key={model}>{model}</option>)}
+                  {TRANSCRIPTION_MODELS.map((model) => <option key={model} value={model}>{transcriptionModelLabel(model)}</option>)}
                 </select>
               </label>
               <label>{analysisMode === "qa" ? "QA model:" : "Opportunity analysis model:"}
@@ -2386,6 +2536,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
               </div>
               <p className="hint">{modelAvailabilityStatus} QA uses the selected model when OpenAI accepts it and falls back to {DEFAULT_QA_MODEL} only after a real selected-model failure. Requested and actual models are saved with each grade.</p>
               <p className="hint">If a selected transcription model is unavailable, CompassAi falls back to {DEFAULT_TRANSCRIPTION_MODEL}.</p>
+              <p className="hint">Economy models reduce cost, but stronger models may interpret ambiguous calls more reliably. Cost estimates use published rates and remain estimates until OpenAI bills the request.</p>
             </div>
             <div className="api-key-box setting-card browser-data-card">
               <div className="setting-card-title"><Trash2 size={19} /><div><h4>Browser data</h4><p>Jobs, scorecard edits, and preferences are stored locally in this browser.</p></div></div>
