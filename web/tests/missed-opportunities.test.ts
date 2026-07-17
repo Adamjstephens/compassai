@@ -31,6 +31,26 @@ function rawFinding(type: OpportunityType, trigger: string, response: string, co
   };
 }
 
+function handledObjection(category: "not_interested" | "free_program_service_boundary", trigger: string, response: string): MissedOpportunityModelPayload {
+  return {
+    findings: [],
+    handledObjections: [{
+      category,
+      title: "Objection handled effectively",
+      assessment: "The agent acknowledged the concern and gave a relevant, supported response.",
+      technique: "Acknowledge and reframe",
+      confidence: .92,
+      customerTrigger: { text: trigger },
+      agentResponse: { text: response },
+      evidence: [
+        { speaker: "customer", text: trigger },
+        { speaker: "agent", text: response },
+      ],
+    }],
+    disposition: { value: "not_booked", confidence: .9, reason: "The objection was handled but no appointment was booked." },
+  };
+}
+
 async function analyze(transcript: string, payload: MissedOpportunityModelPayload, onEvaluate?: () => void) {
   return runMissedOpportunityAnalysis({
     transcript,
@@ -50,9 +70,30 @@ test("not interested followed by immediate ending is flagged", async () => {
 });
 
 test("not interested followed by a valid follow-up is not flagged", async () => {
-  const transcript = `Customer: I'm not interested. Agent: I understand. Was it the timing, the project itself, or something else?${pad}`;
-  const result = await analyze(transcript, { findings: [], disposition: { value: "not_booked", confidence: .9, reason: "Handled objection." } });
+  const trigger = "I'm not interested.";
+  const response = "I understand. Was it the timing, the project itself, or something else?";
+  const transcript = `Customer: ${trigger} Agent: ${response}${pad}`;
+  const result = await analyze(transcript, handledObjection("not_interested", trigger, response));
   assert.equal(result.summary.total, 0);
+  assert.equal(result.handledObjections.length, 1);
+  assert.equal(result.handledObjections[0]?.technique, "Acknowledge and reframe");
+});
+
+test("handled objection evidence must be an exact transcript quote", async () => {
+  const transcript = `Customer: I'm not interested. Agent: May I ask if it is the timing?${pad}`;
+  const result = await analyze(transcript, handledObjection("not_interested", "I'm not interested.", "The agent asked a thoughtful question."));
+  assert.equal(result.handledObjections.length, 0);
+});
+
+test("the same objection cannot be both a missed opportunity and handled well", async () => {
+  const trigger = "I'm not interested.";
+  const response = "Okay, have a good day.";
+  const transcript = `Customer: ${trigger} Agent: ${response}${pad}`;
+  const raw = rawFinding("no_rebuttal_after_objection", trigger, response);
+  raw.handledObjections = handledObjection("not_interested", trigger, response).handledObjections;
+  const result = await analyze(transcript, raw);
+  assert.equal(result.summary.total, 1);
+  assert.equal(result.handledObjections.length, 0);
 });
 
 test("spouse objection accepted without redirect is flagged", async () => {
@@ -96,13 +137,14 @@ test("Medicare service-boundary correction is treated as a valid rebuttal", asyn
   const transcript = "Customer: Medicare says I can get a really good discount, but I think most of this is bullshit. Agent: Medicare is a government health plan. Any government assistance program would be something you would have to apply for with the Pennsylvania government. What we do is specialize in setting up free quotes for people who need windows. I'm sorry that you ran into that misleading ad. Have a good day.";
   const result = await analyze(
     transcript,
-    rawFinding("free_program_objection_not_handled", "I think most of this is bullshit.", "I'm sorry that you ran into that misleading ad."),
+    handledObjection("free_program_service_boundary", "I think most of this is bullshit.", "Medicare is a government health plan."),
     () => { evaluated = true; },
   );
-  assert.equal(evaluated, false);
+  assert.equal(evaluated, true);
   assert.equal(result.disposition.value, "excluded");
   assert.match(result.disposition.reason, /corrected a misleading third-party program claim/i);
   assert.equal(result.summary.total, 0);
+  assert.equal(result.handledObjections.length, 1);
 });
 
 test("busy customer with a scheduled callback is excluded without a model call", async () => {

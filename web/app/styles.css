@@ -756,6 +756,21 @@ main { padding: 24px clamp(18px, 2.4vw, 38px) 48px; max-width: 1900px; width: 10
 .opportunity-empty h4, .opportunity-empty p { margin: 0; }
 .opportunity-empty p { max-width: 620px; line-height: 1.5; }
 .opportunity-empty.compact { min-height: 190px; border: 1px dashed var(--border); border-radius: 8px; }
+.handled-section { display: grid; gap: 10px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+.handled-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.handled-section-heading h4 { margin: 2px 0 0; }
+.handled-section-heading > strong { display: grid; place-items: center; min-width: 30px; height: 30px; border: 1px solid #34d399; border-radius: 50%; color: #047857; background: #d1fae5; }
+.handled-objection-card { display: grid; gap: 10px; border: 1px solid #34d399; border-left: 4px solid #059669; border-radius: 8px; padding: 14px; background: color-mix(in srgb, #d1fae5 34%, var(--panel-soft)); }
+.handled-objection-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.handled-objection-card h4, .handled-objection-card p { margin: 0; }
+.handled-objection-card > p { color: var(--muted); line-height: 1.5; }
+.handled-objection-card > header > strong { color: #047857; }
+.handled-technique { display: flex; align-items: flex-start; gap: 8px; border: 1px solid color-mix(in srgb, #34d399 55%, var(--border)); border-radius: 7px; padding: 10px; background: var(--panel); color: var(--muted); }
+.handled-technique svg { flex: 0 0 auto; color: #059669; margin-top: 2px; }
+.handled-technique span, .handled-technique strong { display: block; }
+.handled-technique strong { color: var(--text); margin-bottom: 2px; }
+.handled-empty { display: flex; align-items: center; gap: 9px; border: 1px dashed var(--border); border-radius: 8px; padding: 14px; color: var(--muted); }
+.handled-empty svg { color: #059669; }
 
 .dialog-backdrop {
   position: fixed;

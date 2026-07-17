@@ -43,6 +43,32 @@ export type MissedOpportunity = {
   fingerprint: string;
 };
 
+export type ObjectionCategory =
+  | "not_interested"
+  | "timing_not_ready"
+  | "appointment_burden"
+  | "price_cost"
+  | "renter_not_owner"
+  | "age_moving"
+  | "already_handled"
+  | "financing_credit"
+  | "trust_past_experience"
+  | "decision_maker"
+  | "free_program_service_boundary"
+  | "other";
+
+export type HandledObjection = {
+  id: string;
+  category: ObjectionCategory;
+  title: string;
+  assessment: string;
+  technique: string;
+  confidence: number;
+  customerTrigger: Omit<OpportunityEvidence, "speaker">;
+  agentResponse: Omit<OpportunityEvidence, "speaker">;
+  evidence: OpportunityEvidence[];
+};
+
 export type MissedOpportunitySummary = {
   total: number;
   highSeverityCount: number;
@@ -66,6 +92,7 @@ export type CandidateWindow = {
 
 export type MissedOpportunityAnalysis = {
   findings: MissedOpportunity[];
+  handledObjections: HandledObjection[];
   summary: MissedOpportunitySummary;
   disposition: CallDisposition;
   analysisVersion: string;
@@ -83,13 +110,14 @@ type RawFinding = Partial<Omit<MissedOpportunity, "id" | "callId" | "analysisVer
 
 export type MissedOpportunityModelPayload = {
   findings?: RawFinding[];
+  handledObjections?: Array<Partial<HandledObjection> & { category?: string }>;
   disposition?: Partial<CallDisposition>;
   identity?: { agentName?: string; customerName?: string; customerPhone?: string };
   notes?: string;
 };
 
-export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.0.1";
-export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v2";
+export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.1.0";
+export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v3";
 export const DEFAULT_OPPORTUNITY_CONFIDENCE = 0.78;
 
 export function normalizeAnalysisMode(value: unknown): AnalysisMode {
@@ -112,6 +140,12 @@ const OPPORTUNITY_TYPES = new Set<OpportunityType>([
   "agent_ended_while_customer_engaged",
 ]);
 
+const OBJECTION_CATEGORIES = new Set<ObjectionCategory>([
+  "not_interested", "timing_not_ready", "appointment_burden", "price_cost",
+  "renter_not_owner", "age_moving", "already_handled", "financing_credit",
+  "trust_past_experience", "decision_maker", "free_program_service_boundary", "other",
+]);
+
 const CANDIDATE_GROUPS: Array<{ category: string; pattern: RegExp }> = [
   { category: "interest", pattern: /\b(not interested|just looking|research(?:ing)? first|need to think|not ready|project (?:is )?for later)\b/gi },
   { category: "decision_maker", pattern: /\b(spouse|husband|wife|partner|decision maker|approval from|talk (?:to|with) (?:him|her|them|my))\b/gi },
@@ -121,6 +155,11 @@ const CANDIDATE_GROUPS: Array<{ category: string; pattern: RegExp }> = [
   { category: "appointment_time", pattern: /\b(that time (?:does not|doesn't|won't) work|cannot make (?:that|it)|can't make (?:that|it)|another time|future date)\b/gi },
   { category: "appointment_resistance", pattern: /\b(do not want an appointment|don't want an appointment|no appointment|not scheduling|not book(?:ing)?)\b/gi },
   { category: "buying_signal", pattern: /\b(how much|what does it cost|when can|how soon|available|estimate|consultation|quote)\b/gi },
+  { category: "ownership", pattern: /\b(rent(?:er|ing)?|landlord|property owner|not (?:the )?owner)\b/gi },
+  { category: "age_moving", pattern: /\b(too old|my age|moving|selling (?:the|my) (?:home|house)|not staying)\b/gi },
+  { category: "already_handled", pattern: /\b(already (?:done|replaced|handled|scheduled|booked)|someone else|another contractor)\b/gi },
+  { category: "financing_credit", pattern: /\b(financ(?:e|ing)|monthly payment|credit score|qualif(?:y|ication)|afford)\b/gi },
+  { category: "trust", pattern: /\b(bad experience|do not trust|don't trust|scam|reviews?|warranty|contractor)\b/gi },
 ];
 
 const BOOKED_PATTERNS = [
@@ -313,12 +352,15 @@ export function aggregateMissedOpportunities(calls: Array<{ agent?: string; anal
 
 export function buildMissedOpportunityPrompt(transcript: string, windows: CandidateWindow[]) {
   const system = `You are a conservative sales-call QA auditor evaluating missed opportunities on a non-booked call.
-Return JSON only with this shape: {"identity":{"agentName":"","customerName":"","customerPhone":""},"findings":[{"type":"...","title":"...","summary":"...","severity":"low|medium|high","confidence":0.0,"customerTrigger":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"agentResponse":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"expectedAction":"...","suggestedResponse":"...","evidence":[{"speaker":"agent|customer|unknown","text":"exact quote","startTime":null,"endTime":null,"turnId":null}]}],"disposition":{"value":"booked|transferred|callback|not_booked|excluded|uncertain","confidence":0.0,"reason":"..."}}.
+Return JSON only with identity, findings, handledObjections, and disposition. handledObjections items use: {"category":"...","title":"...","assessment":"...","technique":"...","confidence":0.0,"customerTrigger":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"agentResponse":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"evidence":[{"speaker":"agent|customer|unknown","text":"exact quote","startTime":null,"endTime":null,"turnId":null}]}.
 Use only exact evidence present in the supplied transcript windows. Infer speaker roles only when context is reliable. Evaluate the next several turns after each objection, then check the call ending for later recovery, booking, transfer, callback, or another next step. Return no finding when uncertain, evidence is insufficient, the transcript is incomplete, speaker roles are unreliable, the customer requests no contact, the lead is disqualified, the service is unavailable, the customer is hostile, or the agent reasonably attempted recovery. A factual correction is a valid rebuttal when the customer asks about Medicare, Medicaid, government grants, free products, or another third-party benefit the company does not administer and the agent explains both that boundary and the actual offer, such as a free quote, estimate, or consultation. Do not instruct the agent to claim that a government or medical program provides company benefits. Distinguish a free quote or consultation from a free product or government-funded service. Do not flag a weak response unless momentum was genuinely abandoned. Do not duplicate or stack findings on the same evidence. Confidence must be at least ${DEFAULT_OPPORTUNITY_CONFIDENCE} for every returned finding. Never invent quotes, timestamps, policy, or outcomes.`;
+  const coachingRubric = `Objection rubric: not interested -> ask one curious question, then reframe; timing/not ready -> separate the free estimate from future work and offer a reasonable later slot; appointment burden -> shrink the ask and offer a specific time; price -> explain that an accurate price requires measurement and redirect to a no-obligation estimate or supported financing; renter/not owner -> verify ownership and exit or seek owner contact; age/moving -> confirm and exit respectfully; already handled -> lightly confirm the same scope, then exit if genuine; financing/credit -> explain only supported options and disqualify only when a documented minimum is unmet; trust/bad experience -> empathize and give one concrete, transcript-supported differentiator. Strong handling generally acknowledges, asks, reframes, and offers a specific next step. A response need not use every step when the objection is resolved appropriately. Genuine disqualifiers should be confirmed and closed cleanly, not pushed. Add handledObjections only when both the objection and effective agent response have exact transcript evidence. Do not put the same interaction in both findings and handledObjections.`;
   const user = JSON.stringify({
     analysisVersion: MISSED_OPPORTUNITY_ANALYSIS_VERSION,
     promptVersion: MISSED_OPPORTUNITY_PROMPT_VERSION,
     allowedTypes: Array.from(OPPORTUNITY_TYPES),
+    objectionCategories: Array.from(OBJECTION_CATEGORIES),
+    coachingRubric,
     candidateWindows: windows,
     callEnding: transcript.slice(-2200),
   });
@@ -354,7 +396,7 @@ export function missedOpportunityResponseFormat() {
       schema: {
         type: "object",
         additionalProperties: false,
-        required: ["identity", "findings", "disposition"],
+        required: ["identity", "findings", "handledObjections", "disposition"],
         properties: {
           identity: {
             type: "object",
@@ -378,6 +420,24 @@ export function missedOpportunityResponseFormat() {
                 agentResponse: quote,
                 expectedAction: { type: "string" },
                 suggestedResponse: { type: "string" },
+                evidence: { type: "array", minItems: 2, items: evidence },
+              },
+            },
+          },
+          handledObjections: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["category", "title", "assessment", "technique", "confidence", "customerTrigger", "agentResponse", "evidence"],
+              properties: {
+                category: { type: "string", enum: Array.from(OBJECTION_CATEGORIES) },
+                title: { type: "string" },
+                assessment: { type: "string" },
+                technique: { type: "string" },
+                confidence: { type: "number", minimum: 0, maximum: 1 },
+                customerTrigger: quote,
+                agentResponse: quote,
                 evidence: { type: "array", minItems: 2, items: evidence },
               },
             },
@@ -422,6 +482,7 @@ export function finalizeMissedOpportunityAnalysis(options: {
   const minimumConfidence = options.minimumConfidence ?? DEFAULT_OPPORTUNITY_CONFIDENCE;
   const previousByFingerprint = new Map((options.previous ?? []).map((finding) => [finding.fingerprint, finding]));
   const findings: MissedOpportunity[] = [];
+  const handledObjections: HandledObjection[] = [];
 
   if (!excluded) {
     for (const raw of options.raw.findings ?? []) {
@@ -467,8 +528,36 @@ export function finalizeMissedOpportunityAnalysis(options: {
     }
   }
 
+  for (const raw of options.raw.handledObjections ?? []) {
+    if (!raw.category || !OBJECTION_CATEGORIES.has(raw.category as ObjectionCategory)) continue;
+    const confidence = Math.max(0, Math.min(1, Number(raw.confidence) || 0));
+    if (confidence < minimumConfidence) continue;
+    const trigger = cleanEvidence(raw.customerTrigger, "customer");
+    const response = cleanEvidence(raw.agentResponse, "agent");
+    if (!includesEvidence(options.transcript, trigger.text) || !includesEvidence(options.transcript, response.text)) continue;
+    const evidence = (Array.isArray(raw.evidence) ? raw.evidence : [])
+      .map((item) => cleanEvidence(item, "unknown"))
+      .filter((item) => includesEvidence(options.transcript, item.text));
+    if (evidence.length < 2) continue;
+    const fingerprint = `${raw.category}:${hashString(normalized(trigger.text).slice(0, 180))}`;
+    if (findings.some((item) => normalized(item.customerTrigger.text) === normalized(trigger.text))) continue;
+    if (handledObjections.some((item) => normalized(item.customerTrigger.text) === normalized(trigger.text))) continue;
+    handledObjections.push({
+      id: `handled-${hashString(`${options.callId}:${fingerprint}`)}`,
+      category: raw.category as ObjectionCategory,
+      title: String(raw.title || "Objection handled well").trim().slice(0, 160),
+      assessment: String(raw.assessment || "The agent responded appropriately and preserved the call outcome.").trim().slice(0, 700),
+      technique: String(raw.technique || "Effective objection handling").trim().slice(0, 240),
+      confidence,
+      customerTrigger: { text: trigger.text, startTime: trigger.startTime, endTime: trigger.endTime, turnId: trigger.turnId },
+      agentResponse: { text: response.text, startTime: response.startTime, endTime: response.endTime, turnId: response.turnId },
+      evidence,
+    });
+  }
+
   return {
     findings,
+    handledObjections,
     summary: summarizeMissedOpportunities(findings),
     disposition,
     analysisVersion: MISSED_OPPORTUNITY_ANALYSIS_VERSION,
@@ -495,7 +584,9 @@ export async function runMissedOpportunityAnalysis(options: {
 }) {
   const windows = detectCandidateWindows(options.transcript);
   const disposition = inferCallDisposition(options.transcript, options.transferOccurred);
-  const shouldEvaluate = disposition.value === "not_booked" && windows.length > 0;
+  const positiveReviewCategories = new Set(["ownership", "age_moving", "already_handled", "financing_credit", "trust", "free_program"]);
+  const shouldEvaluateExcluded = disposition.value === "excluded" && windows.some((window) => positiveReviewCategories.has(window.category));
+  const shouldEvaluate = windows.length > 0 && (disposition.value === "not_booked" || shouldEvaluateExcluded);
   const raw = shouldEvaluate
     ? await options.evaluate(buildMissedOpportunityPrompt(options.transcript, windows), windows)
     : { findings: [], disposition };
