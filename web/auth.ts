@@ -13,6 +13,7 @@ function emailDomain(email: string) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  basePath: "/api/auth",
   trustHost: true,
   providers: [
     MicrosoftEntraID({
@@ -45,4 +46,3 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login"
   }
 });
-
