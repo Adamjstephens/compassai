@@ -37,6 +37,7 @@ import {
   aggregateMissedOpportunities,
   createOpportunityCacheKey,
   detectCandidateWindows,
+  learningCriteriaForWindows,
   filterMissedOpportunities,
   finalizeMissedOpportunityAnalysis,
   normalizeAnalysisMode,
@@ -223,7 +224,7 @@ const QA_MODEL_OPTIONS = [
 ] as const;
 const QA_MODELS = QA_MODEL_OPTIONS.map((option) => option.id);
 const QA_ENGINE_VERSION = "3";
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 const REQUIRED_SCORECARDS = new Set(["Feldco", "Bachmans", "KQR", "Pella", "RbA/QWD"]);
 const VERCEL_RELAY_CHUNK_BYTES = 3_300_000;
 const MAX_BROWSER_AUDIO_BYTES = 90 * 1024 * 1024;
@@ -1695,7 +1696,7 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
           });
           let opportunityAnalysis: MissedOpportunityAnalysis;
           const opportunityClient = scorecards ? makeRuleAnalysis(transcriptPayload.transcript, scorecards).client : "Unknown client";
-          const opportunityCriteria = detectCandidateWindows(transcriptPayload.transcript).map((window) => window.category);
+          const opportunityCriteria = learningCriteriaForWindows(detectCandidateWindows(transcriptPayload.transcript));
           const missedLearning = buildLearningContext(learningState, {
             workflow: "missed_opportunity",
             client: opportunityClient,
@@ -1995,7 +1996,10 @@ export function CompassAiShell({ userEmail }: { userEmail: string }) {
     }
     const effectiveLearningState = typeof options === "object" && options.learningState ? options.learningState : learningState;
     const opportunityClient = target.analysis.client || "Unknown client";
-    const opportunityCriteria = detectCandidateWindows(target.transcript_text).map((window) => window.category);
+    const opportunityCriteria = learningCriteriaForWindows(
+      detectCandidateWindows(target.transcript_text),
+      target.missed_opportunity_analysis?.findings.map((finding) => finding.type),
+    );
     const missedLearning = buildLearningContext(effectiveLearningState, {
       workflow: "missed_opportunity", client: opportunityClient, scorecardId: "opportunity-analysis", scorecardName: "Missed Opportunities", criteria: opportunityCriteria,
     });

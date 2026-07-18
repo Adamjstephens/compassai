@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   finalizeMissedOpportunityAnalysis,
+  isLikelyCustomerDisconnect,
   normalizeAnalysisMode,
   runMissedOpportunityAnalysis,
   type MissedOpportunityModelPayload,
@@ -197,6 +198,33 @@ test("multiple findings using the same trigger are merged", () => {
   const one = rawFinding("no_rebuttal_after_objection", "I'm not interested.", "Okay, goodbye.").findings![0];
   const result = finalizeMissedOpportunityAnalysis({ transcript, callId: "call-1", selectedModel: "gpt-4o-mini", raw: { findings: [one, { ...one, type: "no_follow_up_question" }] } });
   assert.equal(result.summary.total, 1);
+});
+
+test("a bare affirmation cannot prove a buying signal or booking agreement", () => {
+  const transcript = "Agent: Would you be open to getting an estimate for replacements? Customer: Uh, yes. Agent: We would need the homeowner present before someone can come out." + pad;
+  const result = finalizeMissedOpportunityAnalysis({
+    transcript,
+    callId: "call-1",
+    selectedModel: "gpt-5-mini",
+    raw: rawFinding("no_redirect_to_booking", "Uh, yes.", "We would need the homeowner present before someone can come out."),
+  });
+  assert.equal(result.summary.total, 0);
+});
+
+test("terminal unanswered check-ins identify a likely customer disconnect", () => {
+  const transcript = "Customer: I thought the windows were free through a government program. Agent: Government assistance is separate. What we offer is a free estimate for replacement windows. Does that make sense, Ron? Hello?";
+  assert.equal(isLikelyCustomerDisconnect(transcript), true);
+  const result = finalizeMissedOpportunityAnalysis({
+    transcript,
+    callId: "call-1",
+    selectedModel: "gpt-5-mini",
+    raw: rawFinding("no_next_step_established", "I thought the windows were free through a government program.", "What we offer is a free estimate for replacement windows."),
+  });
+  assert.equal(result.summary.total, 0);
+});
+
+test("a normal agent goodbye is not mislabeled as a customer disconnect", () => {
+  assert.equal(isLikelyCustomerDisconnect("Customer: I am not interested. Agent: Understood. Have a good day."), false);
 });
 
 test("QA mode remains the safe default and existing QA data is untouched", () => {

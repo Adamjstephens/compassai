@@ -8,6 +8,7 @@ import {
   sanitizeLearningText,
   upsertLearningCorrection,
 } from "../lib/learning.ts";
+import { detectCandidateWindows, learningCriteriaForWindows } from "../lib/missed-opportunities.ts";
 
 function correction(overrides: Record<string, unknown> = {}) {
   return {
@@ -108,3 +109,24 @@ test("verified learning changes the signature when the correction revision chang
 test("verified learning masks phone numbers and email addresses", () => {
     assert.equal(sanitizeLearningText("Call 312-555-0100 or adam@example.com"), "Call [phone removed] or [email removed]");
   });
+
+test("missed-opportunity corrections are retrieved by their real finding type", () => {
+  const state = upsertLearningCorrection(emptyLearningState(), correction({
+    id: "opp-1",
+    workflow: "missed_opportunity",
+    scope: "universal",
+    client: "Unknown client",
+    scorecardId: "opportunity-analysis",
+    scorecardName: "Missed Opportunities",
+    criterion: "no_redirect_to_booking",
+    correctedAnswer: "Remove false finding",
+  }));
+  const result = buildLearningContext(state, {
+    workflow: "missed_opportunity",
+    client: "Unknown client",
+    scorecardId: "opportunity-analysis",
+    scorecardName: "Missed Opportunities",
+    criteria: learningCriteriaForWindows(detectCandidateWindows("Customer: Would this be a free estimate? Agent: Yes, the estimate is free.")),
+  });
+  assert.deepEqual(result.audit.suppliedIds, ["opp-1"]);
+});

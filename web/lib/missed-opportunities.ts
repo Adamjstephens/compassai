@@ -116,8 +116,8 @@ export type MissedOpportunityModelPayload = {
   notes?: string;
 };
 
-export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.1.0";
-export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v3";
+export const MISSED_OPPORTUNITY_ANALYSIS_VERSION = "1.2.0";
+export const MISSED_OPPORTUNITY_PROMPT_VERSION = "missed-opportunities-v4";
 export const DEFAULT_OPPORTUNITY_CONFIDENCE = 0.78;
 
 export function normalizeAnalysisMode(value: unknown): AnalysisMode {
@@ -139,6 +139,8 @@ const OPPORTUNITY_TYPES = new Set<OpportunityType>([
   "no_next_step_established",
   "agent_ended_while_customer_engaged",
 ]);
+
+export const OPPORTUNITY_TYPE_VALUES = Array.from(OPPORTUNITY_TYPES);
 
 const OBJECTION_CATEGORIES = new Set<ObjectionCategory>([
   "not_interested", "timing_not_ready", "appointment_burden", "price_cost",
@@ -213,6 +215,29 @@ function includesEvidence(transcript: string, quote: string) {
   return normalized(transcript).includes(needle);
 }
 
+function isGenericAffirmation(value: string) {
+  const clean = normalized(value);
+  return /^(?:uh |um |well )?(?:yes|yeah|yep|sure|okay|ok|correct|right)(?: i am| i would| that is fine)?$/.test(clean);
+}
+
+export function isLikelyCustomerDisconnect(transcript: string) {
+  const ending = normalized(transcript.slice(-700));
+  if (!ending) return false;
+  const unansweredCheck = /(?:does that make sense|are you still there|can you hear me|ron|sir|ma am|hello)(?: hello)?$/.test(ending);
+  const agentClosing = /(?:have a good day|goodbye|thank you for your time|we will leave it there)$/.test(ending);
+  return unansweredCheck && !agentClosing;
+}
+
+function closeOpportunity(type: OpportunityType) {
+  return type === "no_redirect_to_booking"
+    || type === "no_alternate_time_offered"
+    || type === "no_callback_attempt"
+    || type === "buying_signal_not_converted"
+    || type === "question_answered_without_close"
+    || type === "no_next_step_established"
+    || type === "agent_ended_while_customer_engaged";
+}
+
 function timestamp(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : undefined;
@@ -275,6 +300,30 @@ export function detectCandidateWindows(transcript: string, radius = 850): Candid
   return candidates
     .sort((left, right) => left.startOffset - right.startOffset)
     .slice(0, 12);
+}
+
+const LEARNING_TYPES_BY_WINDOW: Record<string, OpportunityType[]> = {
+  interest: ["no_rebuttal_after_objection", "no_follow_up_question", "no_redirect_to_booking", "no_next_step_established"],
+  decision_maker: ["decision_maker_objection_not_explored", "no_follow_up_question", "no_next_step_established"],
+  callback: ["no_callback_attempt", "no_next_step_established"],
+  price: ["price_objection_not_handled", "no_redirect_to_booking"],
+  free_program: ["free_program_objection_not_handled", "no_redirect_to_booking", "no_next_step_established"],
+  appointment_time: ["no_alternate_time_offered", "no_next_step_established"],
+  appointment_resistance: ["no_rebuttal_after_objection", "no_follow_up_question", "no_redirect_to_booking"],
+  buying_signal: ["buying_signal_not_converted", "question_answered_without_close", "no_redirect_to_booking", "no_next_step_established"],
+  ownership: ["decision_maker_objection_not_explored", "no_next_step_established"],
+  age_moving: ["no_follow_up_question", "no_redirect_to_booking"],
+  already_handled: ["no_follow_up_question", "no_redirect_to_booking"],
+  financing_credit: ["price_objection_not_handled", "no_redirect_to_booking"],
+  trust: ["no_rebuttal_after_objection", "no_follow_up_question", "no_redirect_to_booking"],
+};
+
+export function learningCriteriaForWindows(windows: CandidateWindow[], previousTypes: string[] = []) {
+  return [...new Set([
+    ...previousTypes.filter((type): type is OpportunityType => OPPORTUNITY_TYPES.has(type as OpportunityType)),
+    ...windows.flatMap((window) => LEARNING_TYPES_BY_WINDOW[window.category] ?? []),
+    ...windows.map((window) => window.category),
+  ])];
 }
 
 export function inferCallDisposition(transcript: string, transferOccurred = false): CallDisposition {
@@ -353,7 +402,7 @@ export function aggregateMissedOpportunities(calls: Array<{ agent?: string; anal
 export function buildMissedOpportunityPrompt(transcript: string, windows: CandidateWindow[]) {
   const system = `You are a conservative sales-call QA auditor evaluating missed opportunities on a non-booked call.
 Return JSON only with identity, findings, handledObjections, and disposition. handledObjections items use: {"category":"...","title":"...","assessment":"...","technique":"...","confidence":0.0,"customerTrigger":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"agentResponse":{"text":"exact quote","startTime":null,"endTime":null,"turnId":null},"evidence":[{"speaker":"agent|customer|unknown","text":"exact quote","startTime":null,"endTime":null,"turnId":null}]}.
-Use only exact evidence present in the supplied transcript windows. Infer speaker roles only when context is reliable. Evaluate the next several turns after each objection, then check the call ending for later recovery, booking, transfer, callback, or another next step. Return no finding when uncertain, evidence is insufficient, the transcript is incomplete, speaker roles are unreliable, the customer requests no contact, the lead is disqualified, the service is unavailable, the customer is hostile, or the agent reasonably attempted recovery. A factual correction is a valid rebuttal when the customer asks about Medicare, Medicaid, government grants, free products, or another third-party benefit the company does not administer and the agent explains both that boundary and the actual offer, such as a free quote, estimate, or consultation. Do not instruct the agent to claim that a government or medical program provides company benefits. Distinguish a free quote or consultation from a free product or government-funded service. Do not flag a weak response unless momentum was genuinely abandoned. Do not duplicate or stack findings on the same evidence. Confidence must be at least ${DEFAULT_OPPORTUNITY_CONFIDENCE} for every returned finding. Never invent quotes, timestamps, policy, or outcomes.`;
+Use only exact evidence present in the supplied transcript windows. Infer speaker roles only when context is reliable. Evaluate objections chronologically as one conversation, not as isolated keyword windows. When several objections or qualification issues occur back-to-back, determine whether the agent is still working through them before expecting a booking attempt. A brief yes, okay, or similar affirmation is not by itself agreement to book; the quoted trigger must include enough context to prove what the customer accepted. Evaluate the next several turns after each objection, then check the call ending for later recovery, booking, transfer, callback, or another next step. If the agent gives a relevant rebuttal and the transcript ends with unanswered check-ins such as 'Hello?' or 'Are you still there?', treat that as likely customer disconnection and do not blame the agent for lacking a later booking or callback attempt. Do not assume a disconnect merely because a transcript stops; require terminal evidence of lost customer response. Return no finding when uncertain, evidence is insufficient, the transcript is incomplete, speaker roles are unreliable, the customer requests no contact, the lead is disqualified, the service is unavailable, the customer is hostile, the customer likely disconnected, or the agent reasonably attempted recovery. A factual correction is a valid rebuttal when the customer asks about Medicare, Medicaid, government grants, free products, or another third-party benefit the company does not administer and the agent explains both that boundary and the actual offer, such as a free quote, estimate, or consultation. Do not instruct the agent to claim that a government or medical program provides company benefits. Distinguish a free quote or consultation from a free product or government-funded service. Do not flag a weak response unless momentum was genuinely abandoned. Do not duplicate or stack findings on the same evidence. Confidence must be at least ${DEFAULT_OPPORTUNITY_CONFIDENCE} for every returned finding. Never invent quotes, timestamps, policy, or outcomes.`;
   const coachingRubric = `Objection rubric: not interested -> ask one curious question, then reframe; timing/not ready -> separate the free estimate from future work and offer a reasonable later slot; appointment burden -> shrink the ask and offer a specific time; price -> explain that an accurate price requires measurement and redirect to a no-obligation estimate or supported financing; renter/not owner -> verify ownership and exit or seek owner contact; age/moving -> confirm and exit respectfully; already handled -> lightly confirm the same scope, then exit if genuine; financing/credit -> explain only supported options and disqualify only when a documented minimum is unmet; trust/bad experience -> empathize and give one concrete, transcript-supported differentiator. Strong handling generally acknowledges, asks, reframes, and offers a specific next step. A response need not use every step when the objection is resolved appropriately. Genuine disqualifiers should be confirmed and closed cleanly, not pushed. Add handledObjections only when both the objection and effective agent response have exact transcript evidence. Do not put the same interaction in both findings and handledObjections.`;
   const user = JSON.stringify({
     analysisVersion: MISSED_OPPORTUNITY_ANALYSIS_VERSION,
@@ -483,15 +532,18 @@ export function finalizeMissedOpportunityAnalysis(options: {
   const previousByFingerprint = new Map((options.previous ?? []).map((finding) => [finding.fingerprint, finding]));
   const findings: MissedOpportunity[] = [];
   const handledObjections: HandledObjection[] = [];
+  const likelyCustomerDisconnect = isLikelyCustomerDisconnect(options.transcript);
 
   if (!excluded) {
     for (const raw of options.raw.findings ?? []) {
       if (!raw.type || !OPPORTUNITY_TYPES.has(raw.type as OpportunityType)) continue;
       if (raw.type === "free_program_objection_not_handled" && isServiceBoundaryCorrection(options.transcript)) continue;
+      if (likelyCustomerDisconnect && closeOpportunity(raw.type as OpportunityType)) continue;
       const confidence = Math.max(0, Math.min(1, Number(raw.confidence) || 0));
       if (confidence < minimumConfidence) continue;
       const trigger = cleanEvidence(raw.customerTrigger, "customer");
       const response = cleanEvidence(raw.agentResponse, "agent");
+      if ((raw.type === "buying_signal_not_converted" || raw.type === "no_redirect_to_booking") && isGenericAffirmation(trigger.text)) continue;
       if (!includesEvidence(options.transcript, trigger.text) || !includesEvidence(options.transcript, response.text)) continue;
       const evidence = (Array.isArray(raw.evidence) ? raw.evidence : [])
         .map((item) => cleanEvidence(item, "unknown"))
